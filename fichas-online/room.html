@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fichas Online — Sala</title>
+  <link rel="stylesheet" href="./assets/app.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="header row space">
+      <div>
+        <h1>Fichas Online</h1>
+        <p class="muted" id="roomMetaLine">Sala: …</p>
+      </div>
+      <div class="row gap">
+        <span class="pill" id="rolePill">…</span>
+        <button class="btn" id="btnLogout">Sair</button>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="sheet">Ficha(s)</button>
+      <button class="tab" data-tab="mental">Mental</button>
+      <button class="tab" data-tab="logs">Logs</button>
+      <button class="tab" data-tab="gm" id="gmTabBtn" style="display:none;">Mesa (GM)</button>
+    </nav>
+
+    <section class="card" id="page">
+      <div id="pageBody" class="page-body">
+        <p class="muted">Carregando…</p>
+      </div>
+    </section>
+
+    <p id="globalStatus" class="status"></p>
+  </main>
+
+  <div class="modal" id="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="row space">
+        <strong id="modalTitle">…</strong>
+        <button class="btn tiny" id="modalClose">Fechar</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+      <div id="modalActions" class="row gap"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { ensureSignedIn, signOutNow } from "./js/auth.js";
+    import { bootstrapRoom } from "./js/room.js";
+    import { state } from "./js/state.js";
+    import { initUI } from "./js/ui.js";
+
+    const $ = (id) => document.getElementById(id);
+
+    $("btnLogout").addEventListener("click", async () => {
+      await signOutNow();
+      location.href = "./index.html";
+    });
+
+    async function main() {
+      const params = new URLSearchParams(location.search);
+      const roomId = params.get("roomId");
+      if (!roomId) {
+        location.href = "./index.html";
+        return;
+      }
+
+      await ensureSignedIn();
+
+      await bootstrapRoom(roomId);
+
+      $("roomMetaLine").textContent = `Sala: ${state.roomCode || roomId}`;
+      $("rolePill").textContent = state.role;
+
+      if (state.role === "GM") $("gmTabBtn").style.display = "";
+
+      initUI();
+    }
+
+    main().catch((e) => {
+      console.error(e);
+      $("globalStatus").textContent = e?.message || "Erro ao carregar sala.";
+      $("globalStatus").className = "status err";
+    });
+  </script>
+</body>
+</html>
