@@ -227,7 +227,9 @@ function initIndex(){
       updates[`rooms/${roomId}/meta`] = { code: roomCode, createdAt: ts, gmUid };
       updates[`rooms/${roomId}/members/${gmUid}`] = { role: "GM", displayName, joinedAt: ts };
 
-      await update(ref(db), updates);
+      update(ref(db), updates).catch((e)=>{
+        console.warn("roll save failed", e);
+      });
       setStatus("Mesa criada. Redirecionando...", "ok");
       location.href = `./app/gm.html?roomId=${encodeURIComponent(roomId)}`;
     }catch(e){
@@ -768,7 +770,9 @@ function initGM(){
             const updates = {};
             updates[`rooms/${roomId}/assignmentsByPlayer/${playerUid}/${s.id}`] = null;
             updates[`rooms/${roomId}/playersBySheet/${s.id}/${playerUid}`] = null;
-            await update(ref(db), updates);
+            update(ref(db), updates).catch((e)=>{
+        console.warn("roll save failed", e);
+      });
             setStatus("Vínculo removido.", "ok");
           }catch(e){
             console.error(e);
@@ -951,7 +955,9 @@ function initGM(){
         }
       }
 
-      await update(ref(db), updates);
+      update(ref(db), updates).catch((e)=>{
+        console.warn("roll save failed", e);
+      });
       sheetIdEl.value = finalId;
       currentSheetId = finalId;
       setStatus(`Ficha salva: ${payload.name}`, "ok");
@@ -978,7 +984,9 @@ function initGM(){
         }
       }
 
-      await update(ref(db), updates);
+      update(ref(db), updates).catch((e)=>{
+        console.warn("roll save failed", e);
+      });
       clearForm();
       setStatus("Ficha deletada.", "ok");
     }catch(e){
@@ -1057,7 +1065,9 @@ function initGM(){
       }
 
       setStatus(`Importando ${report.normalizedSheets.length} fichas...`, "warn");
-      await update(ref(db), updates);
+      update(ref(db), updates).catch((e)=>{
+        console.warn("roll save failed", e);
+      });
       setStatus("Import concluído.", "ok");
     }catch(e){
       console.error(e);
@@ -1670,11 +1680,10 @@ function initPlayer(){
       const updates = {};
       updates[`rooms/${roomId}/rolls/${rollId}`] = payload;
       updates[`rooms/${roomId}/rollsByPlayer/${uid}/${selectedSheetId}/${rollId}`] = payload;
-      await update(ref(db), updates);
-    }catch(e){
-      console.warn("roll save failed", e);
+      update(ref(db), updates).catch((e)=>{
+        console.warn("roll save failed", e);
+      });
     }
-
   }
 
   async function rollAttribute(attrKey){
