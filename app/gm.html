@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GM — Fichas Online</title>
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body data-page="gm">
+  <main class="container">
+    <header class="header">
+      <h1>GM</h1>
+      <div class="muted">Sala: <strong id="roomCodeOut">...</strong></div>
+      <div class="muted">RoomId: <code id="roomIdOut">...</code></div>
+      <div class="row">
+        <a class="link" href="../index.html">← Voltar</a>
+        <button id="btnSignOut" class="btn danger">Sair (logout)</button>
+      </div>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </header>
+
+    <section class="card">
+      <h2>Membros</h2>
+      <div id="membersList" class="list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Fichas (CRUD)</h2>
+
+      <div class="split">
+        <div>
+          <div class="row between">
+            <strong>Lista de fichas</strong>
+            <button id="btnNewSheet" class="btn small">+ Nova ficha</button>
+          </div>
+          <div id="sheetsList" class="list"></div>
+        </div>
+
+        <div>
+          <strong id="sheetFormTitle">Editar / Criar</strong>
+          <form id="sheetForm" class="form" autocomplete="off">
+            <input type="hidden" id="sheetId" />
+
+            <label class="field">
+              <span>Nome</span>
+              <input id="sheetName" type="text" maxlength="60" placeholder="Ex: Guerreiro X" required />
+            </label>
+
+            <div class="grid4">
+              <label class="field">
+                <span>QI</span>
+                <input id="attrQI" type="number" step="1" />
+              </label>
+              <label class="field">
+                <span>FOR</span>
+                <input id="attrFOR" type="number" step="1" />
+              </label>
+              <label class="field">
+                <span>DEX</span>
+                <input id="attrDEX" type="number" step="1" />
+              </label>
+              <label class="field">
+                <span>VIG</span>
+                <input id="attrVIG" type="number" step="1" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Mental (int)</span>
+              <input id="mental" type="number" step="1" />
+            </label>
+
+            <div class="row">
+              <button id="btnSaveSheet" type="submit" class="btn primary">Salvar</button>
+              <button id="btnDeleteSheet" type="button" class="btn danger">Deletar</button>
+            </div>
+
+            <small class="hint muted">Itens/vantagens/desvantagens não são editados no MVP (apenas no import).</small>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Atribuir ficha para player</h2>
+      <div class="grid">
+        <label class="field">
+          <span>Player</span>
+          <select id="assignPlayer"></select>
+        </label>
+        <label class="field">
+          <span>Ficha</span>
+          <select id="assignSheet"></select>
+        </label>
+      </div>
+      <div class="row">
+        <button id="btnAssign" class="btn primary">Salvar atribuição</button>
+      </div>
+      <small class="hint muted">Salva em /assignments/{playerUid} = { sheetId }</small>
+    </section>
+
+    <section class="card">
+      <h2>Import massivo (JSON)</h2>
+      <div class="grid">
+        <label class="field">
+          <span>Colar JSON</span>
+          <textarea id="importText" rows="10" placeholder='{"sheets":[{"name":"Nome","attributes":{"QI":1,"FOR":1,"DEX":1,"VIG":1},"mental":0,"items":[],"advantages":[],"disadvantages":[]}]}'
+          ></textarea>
+        </label>
+        <label class="field">
+          <span>Upload .json</span>
+          <input id="importFile" type="file" accept=".json,application/json" />
+          <small class="hint">Se escolher arquivo, ele substitui o texto.</small>
+        </label>
+      </div>
+
+      <div class="grid">
+        <label class="field">
+          <span>Modo</span>
+          <select id="importMode">
+            <option value="MERGE">MERGE</option>
+            <option value="CREATE_ONLY">CREATE-ONLY</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="btnValidateImport" class="btn">Validar</button>
+        <button id="btnDoImport" class="btn primary">Importar</button>
+      </div>
+
+      <details class="details">
+        <summary>Resultado da validação</summary>
+        <pre id="importReport" class="pre"></pre>
+      </details>
+
+      <small class="hint muted">Importa usando multi-location update para performance.</small>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
