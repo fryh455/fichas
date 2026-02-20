@@ -22,3 +22,7 @@
 - GM criar ficha e atribuir ao player
 - Player vê ficha e rola atributos
 - GM e Player editam o campo **Anotações compartilhadas** e ambos veem sincronizado
+
+## GM fixo (recuperação)
+- Ao criar mesa, o site gera uma **chave do GM** (gmKey). Guarde.
+- Se você perder o acesso de GM (trocar navegador/dispositivo, limpar dados), use **Entrar como GM** no index e informe o gmKey.

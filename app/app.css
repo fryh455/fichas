@@ -16,6 +16,21 @@ h1,h2,h3{ margin:0 0 10px 0; }
 .row.wrap{ flex-wrap:wrap; }
 .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .grid4{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.stat{ padding:10px; border:1px solid rgba(255,255,255,.10); border-radius:12px; background:rgba(0,0,0,.18); }
+.stat .val{ font-weight:750; font-size:18px; margin-top:2px; }
+.stat .hint{ font-size:12px; margin-top:2px; }
+
+
+.val-inline{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.mini-input{ width:90px; margin-top:0; padding:8px 10px; border-radius:10px; font-size:14px; font-weight:700; }
+.muted.small{ font-size:12px; font-weight:600; opacity:.75; }
+
+@media (max-width: 900px){
+  .grid2{ grid-template-columns:1fr; }
+  .grid3{ grid-template-columns:repeat(2,1fr); }
+  .grid4{ grid-template-columns:repeat(2,1fr); }
+}
 .mt12{ margin-top:12px; }
 .hidden{ display:none !important; }
 

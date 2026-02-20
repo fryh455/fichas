@@ -29,6 +29,24 @@
         <button class="btn attr" data-attr="VIG">VIG: <span id="aVIG">0</span></button>
       </div>
 
+      <div class="grid2 mt12">
+        <div class="stat"><div class="muted">Intenções/turno</div><div class="val" id="statIntentions">0</div><div class="hint muted">1 + floor((VIG+DEX)/2)</div></div>
+        <div class="stat"><div class="muted">Movimento/intenção</div><div class="val"><span id="statMove">0</span> m</div><div class="hint muted">DEX + 2</div></div>
+        <div class="stat"><div class="muted">DEF base</div><div class="val" id="statDef">0</div><div class="hint muted">6 + DEX</div></div>
+        <div class="stat"><div class="muted">Limite inventário</div><div class="val val-inline"><span><span id="statInv">0</span> kg</span><span class="muted small">atual</span><input id="invCurrent" class="mini-input" type="number" inputmode="numeric" min="0" step="1" /></div><div class="hint muted">(FOR+VIG) * 4</div></div>
+      </div>
+
+      <div class="mt12">
+        <h3>RES e HP</h3>
+        <div class="grid3">
+          <div class="stat"><div class="muted">Cabeça RES</div><div class="val" id="resHead">0</div></div>
+          <div class="stat"><div class="muted">Torso RES</div><div class="val" id="resTorso">0</div></div>
+          <div class="stat"><div class="muted">Braços e pernas RES</div><div class="val" id="resLimbs">0</div></div>
+          <div class="stat"><div class="muted">HP total</div><div class="val val-inline"><span id="hpTotal">0</span><span class="muted small">atual</span><input id="hpCurrent" class="mini-input" type="number" inputmode="numeric" min="0" step="1" /></div></div>
+        </div>
+        <div class="muted" style="margin-top:8px">Fórmulas: Cabeça (VIG+3)*3+6 • Torso (VIG+FOR+3)*3+6 • Braços/Pernas (VIG+3)*2+6 • HP=(ΣRES membros)*2</div>
+      </div>
+
       <div class="mt12">
         <h3>Anotações compartilhadas</h3>
         <textarea id="sharedNotes" rows="6" spellcheck="false" placeholder="Escreva anotações... (salva automático)"></textarea>

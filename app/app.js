@@ -81,6 +81,72 @@ function slugify(input){
   return s;
 }
 
+
+// --- GM key (recuperação de GM) ---
+function normalizeGmKey(key){
+  return String(key || "").trim().toUpperCase().replace(/\s+/g, "").replace(/[^A-Z0-9-]/g, "");
+}
+function gmKeyStorageKey(roomCode){
+  return `fo_gmKey_${safeRoomCode(roomCode)}`;
+}
+function getGmKey(roomCode){
+  return localStorage.getItem(gmKeyStorageKey(roomCode)) || "";
+}
+function setGmKey(roomCode, gmKey){
+  localStorage.setItem(gmKeyStorageKey(roomCode), String(gmKey || ""));
+}
+function generateGmKey(){
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let raw = "";
+  for(let i=0;i<16;i++) raw += alphabet[Math.floor(Math.random()*alphabet.length)];
+  return raw.match(/.{1,4}/g).join("-");
+}
+async function sha256Hex(input){
+  const data = new TextEncoder().encode(String(input));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function claimGmWithKey({ roomId, roomCode, displayName, gmKey }){
+  const user = await ensureAnonAuth();
+  const uid = user.uid;
+  const code = safeRoomCode(roomCode || "");
+  const name = safeName(displayName || localStorage.getItem("fo_displayName") || "GM");
+  const key = normalizeGmKey(gmKey || getGmKey(code));
+  if(!code) throw new Error("roomCode ausente.");
+  if(!key) throw new Error("Chave do GM ausente.");
+
+  // garante que existe um member para mostrar nome (cria como PLAYER se não existir)
+  const memberRef = ref(db, `rooms/${roomId}/members/${uid}`);
+  try{
+    const ms = await get(memberRef);
+    if(!ms.exists()){
+      await set(memberRef, { role: "PLAYER", displayName: name, joinedAt: serverTimestamp() });
+    }
+  }catch(_){
+    // se falhar por permissão, segue (GM pode estar lendo depois)
+  }
+
+  const hash = await sha256Hex(key);
+  await set(ref(db, `rooms/${roomId}/gmClaims/${uid}`), { hash, at: serverTimestamp() });
+
+  const metaRef = ref(db, `rooms/${roomId}/meta`);
+  const metaSnap = await get(metaRef);
+  const oldGmUid = metaSnap.exists() ? (metaSnap.val()?.gmUid || null) : null;
+
+  await update(metaRef, { gmUid: uid });
+
+  // best-effort: manter 1 GM só
+  try{
+    await update(ref(db, `rooms/${roomId}/members/${uid}`), { role: "GM" });
+    if(oldGmUid && oldGmUid !== uid){
+      await update(ref(db, `rooms/${roomId}/members/${oldGmUid}`), { role: "PLAYER" });
+    }
+  }catch(_){}
+
+  setGmKey(code, key);
+  return { uid, oldGmUid, code, key };
+}
+
 function ensureObj(x){ return (x && typeof x === "object" && !Array.isArray(x)) ? x : {}; }
 
 function debounce(fn, ms){
@@ -126,11 +192,28 @@ function initIndex(){
   const roomCodeEl = $("#roomCode");
   const btnCreate = $("#btnCreate");
   const btnJoin = $("#btnJoin");
+  const gmKeyEl = $("#gmKey");
+  const btnJoinGM = $("#btnJoinGM");
 
   displayNameEl.value = localStorage.getItem("fo_displayName") || "";
   roomCodeEl.value = localStorage.getItem("fo_roomCode") || "";
   displayNameEl.addEventListener("input", ()=> localStorage.setItem("fo_displayName", displayNameEl.value));
   roomCodeEl.addEventListener("input", ()=> localStorage.setItem("fo_roomCode", roomCodeEl.value));
+
+  if(gmKeyEl){
+    const initCode = safeRoomCode(roomCodeEl.value);
+    gmKeyEl.value = getGmKey(initCode) || localStorage.getItem("fo_gmKey_last") || "";
+    gmKeyEl.addEventListener("input", ()=>{
+      localStorage.setItem("fo_gmKey_last", gmKeyEl.value);
+      const code = safeRoomCode(roomCodeEl.value);
+      if(code) setGmKey(code, normalizeGmKey(gmKeyEl.value));
+    });
+    roomCodeEl.addEventListener("input", ()=>{
+      const code = safeRoomCode(roomCodeEl.value);
+      const stored = code ? getGmKey(code) : "";
+      if(stored) gmKeyEl.value = stored;
+    });
+  }
 
   btnCreate.addEventListener("click", async () => {
     setStatus("Autenticando...", "warn");
@@ -156,6 +239,21 @@ function initIndex(){
       updates[`rooms/${roomId}/members/${gmUid}`] = { role: "GM", displayName, joinedAt: ts };
 
       await update(ref(db), updates);
+
+      // Chave do GM (para recuperar em outro navegador/dispositivo)
+      const gmKey = generateGmKey();
+      const gmKeyNorm = normalizeGmKey(gmKey);
+      try{
+        const hash = await sha256Hex(gmKeyNorm);
+        await set(ref(db, `rooms/${roomId}/secrets/gmKeyHash`), hash);
+        setGmKey(roomCode, gmKeyNorm);
+        localStorage.setItem("fo_gmKey_last", gmKeyNorm);
+      }catch(e){
+        console.warn("Falha ao salvar chave do GM no DB:", e);
+      }
+      if(gmKeyEl) gmKeyEl.value = gmKeyNorm;
+      try{ window.prompt("Chave do GM (guarde para recuperar):", gmKeyNorm); }catch(_){ }
+
       setStatus("Mesa criada. Redirecionando...", "ok");
       location.href = `./app/gm.html?roomId=${encodeURIComponent(roomId)}`;
     }catch(e){
@@ -190,6 +288,33 @@ function initIndex(){
       setStatus(`Erro: ${e?.message || e}`, "err");
     }
   });
+
+  btnJoinGM?.addEventListener("click", async () => {
+    setStatus("Autenticando...", "warn");
+    try{
+      await ensureAnonAuth();
+      const displayName = safeName(displayNameEl.value);
+      const roomCode = safeRoomCode(roomCodeEl.value);
+      const gmKey = gmKeyEl ? gmKeyEl.value : getGmKey(roomCode);
+      if(!displayName) return setStatus("Preencha displayName.", "err");
+      if(!roomCode) return setStatus("Preencha roomCode.", "err");
+      if(!gmKey) return setStatus("Preencha a chave do GM.", "err");
+
+      setStatus("Resolvendo mesa...", "warn");
+      const codeSnap = await get(ref(db, `roomsByCode/${roomCode}`));
+      if(!codeSnap.exists()) return setStatus("mesa não encontrada", "err");
+
+      const roomId = codeSnap.val();
+      setStatus("Reivindicando GM...", "warn");
+      await claimGmWithKey({ roomId, roomCode, displayName, gmKey });
+
+      setStatus("OK. Redirecionando...", "ok");
+      location.href = `./app/gm.html?roomId=${encodeURIComponent(roomId)}`;
+    }catch(e){
+      console.error(e);
+      setStatus(`Erro: ${e?.message || e}`, "err");
+    }
+  });
 }
 
 /** --------------------------
@@ -206,6 +331,8 @@ function initGM(){
   });
 
   const roomCodeOut = $("#roomCodeOut");
+  const gmKeyOut = $("#gmKeyOut");
+  const btnCopyGmKey = $("#btnCopyGmKey");
   const membersList = $("#membersList");
   const sheetsList = $("#sheetsList");
 
@@ -219,6 +346,9 @@ function initGM(){
   const attrVIG = $("#attrVIG");
   const mentalEl = $("#mental");
   const sharedNotesEl = $("#sharedNotes");
+
+  const hpCurrentEl = $("#hpCurrent");
+  const invCurrentEl = $("#invCurrent");
   const btnDeleteSheet = $("#btnDeleteSheet");
 
   const assignPlayer = $("#assignPlayer");
@@ -1027,8 +1157,36 @@ function initGM(){
     meta = metaSnap.val();
     roomCodeOut && (roomCodeOut.textContent = meta.code || "?");
 
+    if(gmKeyOut){
+      const k = getGmKey(meta.code || "");
+      gmKeyOut.value = k || "";
+    }
+    btnCopyGmKey?.addEventListener("click", async () => {
+      try{
+        const v = String(gmKeyOut?.value || "");
+        if(!v) return setStatus("Sem chave neste navegador.", "warn");
+        await navigator.clipboard.writeText(v);
+        setStatus("Chave copiada.", "ok");
+      }catch(e){
+        console.error(e);
+        setStatus("Falha ao copiar (clipboard).", "err");
+      }
+    });
+
     if(meta.gmUid !== userUid){
-      setStatus("Acesso negado: você não é o GM desta sala.", "err");
+      const storedKey = getGmKey(meta.code || "");
+      if(storedKey){
+        setStatus("Reivindicando GM pela chave...", "warn");
+        try{
+          await claimGmWithKey({ roomId, roomCode: meta.code, displayName: localStorage.getItem("fo_displayName") || "GM", gmKey: storedKey });
+          setStatus("GM recuperado. Recarregando...", "ok");
+          location.reload();
+          return;
+        }catch(e){
+          console.error(e);
+        }
+      }
+      setStatus("Acesso negado: você não é o GM desta sala (use a chave do GM).", "err");
       return;
     }
 
@@ -1078,6 +1236,9 @@ function initPlayer(){
   const disadvantagesList = $("#disadvantagesList");
   const sharedNotesEl = $("#sharedNotes");
 
+  const hpCurrentEl = $("#hpCurrent");
+  const invCurrentEl = $("#invCurrent");
+
   const attrSpans = {
     QI: $("#aQI"),
     FOR: $("#aFOR"),
@@ -1085,11 +1246,27 @@ function initPlayer(){
     VIG: $("#aVIG"),
   };
 
+  const derivedSpans = {
+    intentions: $("#statIntentions"),
+    move: $("#statMove"),
+    defBase: $("#statDef"),
+    invLimit: $("#statInv"),
+    resHead: $("#resHead"),
+    resTorso: $("#resTorso"),
+    resLimbs: $("#resLimbs"),
+    hpTotal: $("#hpTotal"),
+  };
+
   let uid = null;
   let assignedSheetId = null;
   let sheet = null;
   let plNotesUnsub = null;
   let plNotesLocalEditing = false;
+
+  let hpLocalEditing = false;
+  let invLocalEditing = false;
+  let hpSaveTimer = null;
+  let invSaveTimer = null;
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
   const selectedPassives = new Map();
@@ -1100,11 +1277,36 @@ function initPlayer(){
     for(const k of Object.keys(attrSpans)){
       if(attrSpans[k]) attrSpans[k].textContent = "0";
     }
+    for(const k of Object.keys(derivedSpans)){
+      if(derivedSpans[k]) derivedSpans[k].textContent = "0";
+    }
     if(itemsList) itemsList.innerHTML = "";
     if(advantagesList) advantagesList.innerHTML = "";
     if(disadvantagesList) disadvantagesList.innerHTML = "";
     if(rollOut) rollOut.textContent = "";
     if(sharedNotesEl) sharedNotesEl.value = "";
+    if(hpCurrentEl) hpCurrentEl.value = "";
+    if(invCurrentEl) invCurrentEl.value = "";
+  }
+
+
+  function computeDerived(attrs){
+    const FOR = asNum(attrs?.FOR, 0);
+    const DEX = asNum(attrs?.DEX, 0);
+    const VIG = asNum(attrs?.VIG, 0);
+
+    const intentions = 1 + Math.floor((VIG + DEX) / 2);
+    const move = DEX + 2;
+    const defBase = 6 + DEX;
+    const invLimit = (FOR + VIG) * 4;
+
+    // Correção do cálculo de RES (conforme mesa): braços e pernas usam um único valor (não separar no HP).
+    const resHead = (VIG + 3) * 3 + 6;
+    const resTorso = (VIG + FOR + 3) * 3 + 6;
+    const resLimbs = (VIG + 3) * 2 + 6;
+    const hpTotal = (resHead + resTorso + resLimbs) * 2;
+
+    return { intentions, move, defBase, invLimit, resHead, resTorso, resLimbs, hpTotal };
   }
 
   function renderSheet(){
@@ -1118,6 +1320,31 @@ function initPlayer(){
     if(attrSpans.FOR) attrSpans.FOR.textContent = String(asNum(attrs.FOR, 0));
     if(attrSpans.DEX) attrSpans.DEX.textContent = String(asNum(attrs.DEX, 0));
     if(attrSpans.VIG) attrSpans.VIG.textContent = String(asNum(attrs.VIG, 0));
+
+    const d = computeDerived(attrs);
+    if(derivedSpans.intentions) derivedSpans.intentions.textContent = String(d.intentions);
+    if(derivedSpans.move) derivedSpans.move.textContent = String(d.move);
+    if(derivedSpans.defBase) derivedSpans.defBase.textContent = String(d.defBase);
+    if(derivedSpans.invLimit) derivedSpans.invLimit.textContent = String(d.invLimit);
+    if(derivedSpans.resHead) derivedSpans.resHead.textContent = String(d.resHead);
+    if(derivedSpans.resTorso) derivedSpans.resTorso.textContent = String(d.resTorso);
+    if(derivedSpans.resLimbs) derivedSpans.resLimbs.textContent = String(d.resLimbs);
+        if(derivedSpans.hpTotal) derivedSpans.hpTotal.textContent = String(d.hpTotal);
+
+    // HP atual / Inventário atual (persistidos no sheet)
+    if(hpCurrentEl && !hpLocalEditing) hpCurrentEl.value = String(asInt(sheet?.hpCurrent, d.hpTotal));
+    if(invCurrentEl && !invLocalEditing) invCurrentEl.value = String(asInt(sheet?.invCurrent, 0));
+
+    // inicializa defaults caso não existam (uma vez por ficha)
+    const sheetBasePath = `rooms/${roomId}/sheets/${assignedSheetId}`;
+    if(sheet && assignedSheetId){
+      if(sheet.hpCurrent === undefined || sheet.hpCurrent === null){
+        set(ref(db, sheetBasePath + "/hpCurrent"), d.hpTotal).catch(()=>{});
+      }
+      if(sheet.invCurrent === undefined || sheet.invCurrent === null){
+        set(ref(db, sheetBasePath + "/invCurrent"), 0).catch(()=>{});
+      }
+    }
 
     renderCategory(itemsList, "items", ensureObj(sheet?.items));
     renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
@@ -1429,6 +1656,30 @@ $$(".btn.die").forEach(btn => {
         saveNotes();
       });
       sharedNotesEl.addEventListener("blur", ()=>{ plNotesLocalEditing = false; });
+    }
+
+    // HP atual
+    if(hpCurrentEl){
+      const hpRef = ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/hpCurrent`);
+      const saveHp = debounce(async ()=>{
+        if(!assignedSheetId) return;
+        const v = asInt(hpCurrentEl.value, 0);
+        try{ await set(hpRef, Math.max(0, v)); }catch(e){ console.error(e); }
+      }, 350);
+      hpCurrentEl.addEventListener("input", ()=>{ hpLocalEditing = true; saveHp(); });
+      hpCurrentEl.addEventListener("blur", ()=>{ hpLocalEditing = false; });
+    }
+
+    // Inventário atual
+    if(invCurrentEl){
+      const invRef = ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/invCurrent`);
+      const saveInv = debounce(async ()=>{
+        if(!assignedSheetId) return;
+        const v = asInt(invCurrentEl.value, 0);
+        try{ await set(invRef, Math.max(0, v)); }catch(e){ console.error(e); }
+      }, 350);
+      invCurrentEl.addEventListener("input", ()=>{ invLocalEditing = true; saveInv(); });
+      invCurrentEl.addEventListener("blur", ()=>{ invLocalEditing = false; });
     }
   })().catch((e)=>{
     console.error(e);
