@@ -11,8 +11,6 @@ import {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-function nowMs(){ return Date.now(); }
-
 function setStatus(msg, type=""){
   const el = $("#status");
   if(!el) return;
@@ -46,10 +44,6 @@ async function ensureAnonAuth(){
   return cred.user;
 }
 
-function linkifyRole(role){
-  return role === "GM" ? "GM" : "PLAYER";
-}
-
 function asInt(v, fallback=0){
   const n = Number(v);
   if(!Number.isFinite(n)) return fallback;
@@ -71,6 +65,31 @@ function parseJsonLenient(text){
 
 function buildDice(n){ return 1 + Math.floor(Math.random() * n); }
 
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function slugify(input){
+  let s = String(input || "").trim().toLowerCase();
+  // remove accents
+  s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // spaces -> hyphen
+  s = s.replace(/\s+/g, "-");
+  // keep [a-z0-9-]
+  s = s.replace(/[^a-z0-9-]/g, "");
+  // collapse hyphens
+  s = s.replace(/-+/g, "-");
+  // trim hyphens
+  s = s.replace(/^-+/, "").replace(/-+$/, "");
+  return s;
+}
+
+function linkifyRole(role){
+  return role === "GM" ? "GM" : "PLAYER";
+}
+
 /** --------------------------
  * Routing by page
  * -------------------------- */
@@ -90,7 +109,6 @@ function initIndex(){
   const btnCreate = $("#btnCreate");
   const btnJoin = $("#btnJoin");
 
-  // UX: persist last inputs (localStorage only - not RTDB)
   displayNameEl.value = localStorage.getItem("fo_displayName") || "";
   roomCodeEl.value = localStorage.getItem("fo_roomCode") || "";
   displayNameEl.addEventListener("input", ()=> localStorage.setItem("fo_displayName", displayNameEl.value));
@@ -158,14 +176,13 @@ function initIndex(){
 }
 
 /** --------------------------
- * gm.html
+ * GM
  * -------------------------- */
 function initGM(){
   const roomId = mustRoomId();
   $("#roomIdOut").textContent = roomId;
 
-  const btnSignOut = $("#btnSignOut");
-  btnSignOut.addEventListener("click", async () => {
+  $("#btnSignOut").addEventListener("click", async () => {
     await signOut(auth);
     location.href = "../index.html";
   });
@@ -174,6 +191,7 @@ function initGM(){
   const roomCodeOut = $("#roomCodeOut");
   const membersList = $("#membersList");
   const sheetsList = $("#sheetsList");
+
   const btnNewSheet = $("#btnNewSheet");
   const sheetForm = $("#sheetForm");
   const sheetIdEl = $("#sheetId");
@@ -196,13 +214,219 @@ function initGM(){
   const btnDoImport = $("#btnDoImport");
   const importReport = $("#importReport");
 
-  // in-memory caches
+  // Entry CRUD UI
+  const itemsCrudList = $("#itemsCrudList");
+  const advantagesCrudList = $("#advantagesCrudList");
+  const disadvantagesCrudList = $("#disadvantagesCrudList");
+  const btnAddItem = $("#btnAddItem");
+  const btnAddAdv = $("#btnAddAdv");
+  const btnAddDis = $("#btnAddDis");
+
+  const entryCategory = $("#entryCategory");
+  const entryId = $("#entryId");
+  const entryName = $("#entryName");
+  const entryType = $("#entryType");
+  const entryAttrBase = $("#entryAttrBase");
+  const entryModMode = $("#entryModMode");
+  const entryModValue = $("#entryModValue");
+  const entryUsesCurrent = $("#entryUsesCurrent");
+  const entryUsesMax = $("#entryUsesMax");
+  const entryNotes = $("#entryNotes");
+  const btnSaveEntry = $("#btnSaveEntry");
+  const btnDeleteEntry = $("#btnDeleteEntry");
+  const btnClearEntry = $("#btnClearEntry");
+
+  // In-memory state
   let userUid = null;
   let meta = null;
   let members = {};
   let sheets = {};
+  let currentSheetId = null; // slug
+  let currentSheetDraft = null; // object with items/advantages/disadvantages as objects
 
-  // Auth gate + verify GM via meta.gmUid
+  // --- helpers for entries ---
+  function emptyEntry(){
+    return {
+      name: "",
+      type: "PASSIVA",
+      atributoBase: null,
+      modValue: null,
+      modMode: "NONE",
+      usesCurrent: null,
+      usesMax: null,
+      notes: null
+    };
+  }
+
+  function ensureObj(x){ return (x && typeof x === "object" && !Array.isArray(x)) ? x : {}; }
+
+  function normalizeEntryPayload(e){
+    const out = {};
+    out.name = String(e?.name || "").trim().slice(0,80);
+    out.type = (e?.type === "ATIVA") ? "ATIVA" : "PASSIVA";
+    out.atributoBase = (["QI","FOR","DEX","VIG"].includes(e?.atributoBase)) ? e.atributoBase : null;
+
+    const mm = e?.modMode;
+    out.modMode = (mm === "SOMA" || mm === "MULT" || mm === "NONE") ? mm : "NONE";
+
+    if(out.modMode === "NONE"){
+      out.modValue = null;
+    }else{
+      const mv = Number(e?.modValue);
+      out.modValue = Number.isFinite(mv) ? mv : 0;
+    }
+
+    const uc = e?.usesCurrent;
+    const um = e?.usesMax;
+    out.usesCurrent = (uc === null || uc === undefined || uc === "") ? null : (Number.isFinite(Number(uc)) ? Math.trunc(Number(uc)) : null);
+    out.usesMax = (um === null || um === undefined || um === "") ? null : (Number.isFinite(Number(um)) ? Math.trunc(Number(um)) : null);
+    out.notes = (e?.notes === null || e?.notes === undefined) ? null : String(e.notes).slice(0,800);
+
+    return out;
+  }
+
+  function renderEntryLists(){
+    renderEntryList(itemsCrudList, "items");
+    renderEntryList(advantagesCrudList, "advantages");
+    renderEntryList(disadvantagesCrudList, "disadvantages");
+  }
+
+  function renderEntryList(container, category){
+    container.innerHTML = "";
+    const obj = ensureObj(currentSheetDraft?.[category]);
+    const entries = Object.entries(obj);
+    if(entries.length === 0){
+      container.innerHTML = '<div class="muted">(vazio)</div>';
+      return;
+    }
+    entries
+      .sort((a,b)=> (a[1]?.name || "").localeCompare(b[1]?.name || ""))
+      .forEach(([id, e]) => {
+        const div = document.createElement("div");
+        div.className = "item";
+        const badges = [
+          `<span class="badge">${escapeHtml(e?.type || "")}</span>`,
+          e?.atributoBase ? `<span class="badge">${escapeHtml(e.atributoBase)}</span>` : `<span class="badge">sem atributo</span>`,
+          `<span class="badge">${escapeHtml(e?.modMode || "NONE")}</span>`,
+          (e?.modMode !== "NONE" && e?.modValue !== null && e?.modValue !== undefined) ? `<span class="badge">${escapeHtml(String(e.modValue))}</span>` : ""
+        ].filter(Boolean).join(" ");
+
+        const uses = (e?.usesCurrent !== null && e?.usesCurrent !== undefined) || (e?.usesMax !== null && e?.usesMax !== undefined)
+          ? `<span class="badge">uses ${e?.usesCurrent ?? "?"}/${e?.usesMax ?? "?"}</span>`
+          : "";
+
+        div.innerHTML = `
+          <div class="meta">
+            <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
+            <div class="sub"><code>${id}</code></div>
+            <div class="kv">${badges} ${uses}</div>
+          </div>
+          <div class="row" style="margin:0">
+            <button class="btn small" data-edit="${id}">Editar</button>
+          </div>
+        `;
+        div.querySelector("[data-edit]").addEventListener("click", () => selectEntry(category, id));
+        container.appendChild(div);
+      });
+  }
+
+  function selectEntry(category, id){
+    const obj = ensureObj(currentSheetDraft?.[category]);
+    const e = obj[id];
+    if(!e) return;
+
+    entryCategory.value = category;
+    entryId.value = id;
+    entryName.value = e.name || "";
+    entryType.value = (e.type === "ATIVA") ? "ATIVA" : "PASSIVA";
+    entryAttrBase.value = e.atributoBase || "";
+    entryModMode.value = (e.modMode === "SOMA" || e.modMode === "MULT" || e.modMode === "NONE") ? e.modMode : "NONE";
+    entryModValue.value = (e.modValue === null || e.modValue === undefined) ? "" : String(e.modValue);
+
+    entryUsesCurrent.value = (e.usesCurrent === null || e.usesCurrent === undefined) ? "" : String(e.usesCurrent);
+    entryUsesMax.value = (e.usesMax === null || e.usesMax === undefined) ? "" : String(e.usesMax);
+    entryNotes.value = (e.notes === null || e.notes === undefined) ? "" : String(e.notes);
+
+    setStatus("Registro carregado no editor.", "ok");
+  }
+
+  function clearEntryEditor(){
+    entryCategory.value = "items";
+    entryId.value = "";
+    entryName.value = "";
+    entryType.value = "PASSIVA";
+    entryAttrBase.value = "";
+    entryModMode.value = "NONE";
+    entryModValue.value = "";
+    entryUsesCurrent.value = "";
+    entryUsesMax.value = "";
+    entryNotes.value = "";
+  }
+
+  function createNewEntry(category){
+    if(!currentSheetDraft){
+      setStatus("Selecione/crie uma ficha primeiro.", "err");
+      return;
+    }
+    const id = push(ref(db, `rooms/${roomId}/tmp`)).key; // local id generator
+    currentSheetDraft[category] = ensureObj(currentSheetDraft[category]);
+    currentSheetDraft[category][id] = emptyEntry();
+    renderEntryLists();
+    selectEntry(category, id);
+    setStatus("Novo registro criado (não salvo ainda).", "ok");
+  }
+
+  btnAddItem.addEventListener("click", ()=> createNewEntry("items"));
+  btnAddAdv.addEventListener("click", ()=> createNewEntry("advantages"));
+  btnAddDis.addEventListener("click", ()=> createNewEntry("disadvantages"));
+
+  btnSaveEntry.addEventListener("click", ()=>{
+    const category = entryCategory.value;
+    const id = entryId.value;
+    if(!currentSheetDraft) return setStatus("Sem ficha carregada.", "err");
+    if(!id) return setStatus("Selecione um registro para salvar.", "err");
+
+    const payload = normalizeEntryPayload({
+      name: entryName.value,
+      type: entryType.value,
+      atributoBase: entryAttrBase.value || null,
+      modMode: entryModMode.value,
+      modValue: entryModValue.value,
+      usesCurrent: entryUsesCurrent.value,
+      usesMax: entryUsesMax.value,
+      notes: entryNotes.value
+    });
+
+    if(!payload.name){
+      return setStatus("Nome do registro é obrigatório.", "err");
+    }
+
+    currentSheetDraft[category] = ensureObj(currentSheetDraft[category]);
+    currentSheetDraft[category][id] = payload;
+    renderEntryLists();
+    setStatus("Registro atualizado no draft (salvar ficha para persistir).", "ok");
+  });
+
+  btnDeleteEntry.addEventListener("click", ()=>{
+    const category = entryCategory.value;
+    const id = entryId.value;
+    if(!currentSheetDraft) return setStatus("Sem ficha carregada.", "err");
+    if(!id) return setStatus("Selecione um registro para deletar.", "err");
+    const obj = ensureObj(currentSheetDraft[category]);
+    if(!obj[id]) return setStatus("Registro não existe.", "warn");
+    delete obj[id];
+    currentSheetDraft[category] = obj;
+    renderEntryLists();
+    clearEntryEditor();
+    setStatus("Registro removido do draft (salvar ficha para persistir).", "ok");
+  });
+
+  btnClearEntry.addEventListener("click", ()=>{
+    clearEntryEditor();
+    setStatus("Seleção limpa.", "ok");
+  });
+
+  // --- Auth gate + verify GM ---
   (async () => {
     setStatus("Autenticando...", "warn");
     const user = await ensureAnonAuth();
@@ -224,18 +448,21 @@ function initGM(){
 
     setStatus("OK. Sincronizando...", "ok");
 
-    // Members realtime
     onValue(ref(db, `rooms/${roomId}/members`), (snap) => {
       members = snap.val() || {};
       renderMembers();
       renderAssignPlayers();
     });
 
-    // Sheets realtime
     onValue(ref(db, `rooms/${roomId}/sheets`), (snap) => {
       sheets = snap.val() || {};
       renderSheets();
       renderAssignSheets();
+      // keep current selection updated
+      if(currentSheetId && sheets[currentSheetId]){
+        // refresh draft from RTDB only if we are not actively editing? keep simple: always refresh if ids match.
+        loadSheetIntoForm(currentSheetId, false);
+      }
     });
   })().catch((e)=>{
     console.error(e);
@@ -289,7 +516,7 @@ function initGM(){
             <button class="btn small" data-edit="${id}">Editar</button>
           </div>
         `;
-        div.querySelector("[data-edit]").addEventListener("click", () => loadSheetIntoForm(id));
+        div.querySelector("[data-edit]").addEventListener("click", () => loadSheetIntoForm(id, true));
         sheetsList.appendChild(div);
       });
   }
@@ -335,7 +562,7 @@ function initGM(){
       list.forEach(s=>{
         const opt = document.createElement("option");
         opt.value = s.id;
-        opt.textContent = `${s.name} (${s.id.slice(0,6)}…)`;
+        opt.textContent = `${s.name} (${s.id})`;
         assignSheet.appendChild(opt);
       });
     }
@@ -350,11 +577,51 @@ function initGM(){
     attrVIG.value = 0;
     mentalEl.value = 0;
     $("#sheetFormTitle").textContent = "Criar";
+    currentSheetId = null;
+    currentSheetDraft = {
+      items: {},
+      advantages: {},
+      disadvantages: {}
+    };
+    renderEntryLists();
+    clearEntryEditor();
   }
 
-  function loadSheetIntoForm(id){
+  async function nextAvailableSlug(baseSlug){
+    for(let i=2;i<200;i++){
+      const candidate = `${baseSlug}-${i}`;
+      const snap = await get(ref(db, `rooms/${roomId}/sheets/${candidate}`));
+      if(!snap.exists()) return candidate;
+    }
+    throw new Error("Não foi possível gerar sufixo disponível.");
+  }
+
+  async function resolveSlugForCreate(baseSlug){
+    const snap = await get(ref(db, `rooms/${roomId}/sheets/${baseSlug}`));
+    if(!snap.exists()) return baseSlug;
+
+    const overwrite = confirm(`Já existe uma ficha com ID "${baseSlug}".\n\nOK = sobrescrever (MERGE)\nCancelar = criar com sufixo (-2, -3...)`);
+    if(overwrite) return baseSlug;
+    return await nextAvailableSlug(baseSlug);
+  }
+
+  async function resolveSlugForImport(baseSlug, mode, existingSet){
+    if(mode === "MERGE"){
+      return baseSlug;
+    }
+    // CREATE_ONLY
+    if(!existingSet.has(baseSlug)) return baseSlug;
+    for(let i=2;i<200;i++){
+      const candidate = `${baseSlug}-${i}`;
+      if(!existingSet.has(candidate)) return candidate;
+    }
+    throw new Error("Não foi possível gerar sufixo disponível (import).");
+  }
+
+  function loadSheetIntoForm(id, userAction){
     const s = sheets[id];
     if(!s) return;
+    currentSheetId = id;
     sheetIdEl.value = id;
     sheetNameEl.value = s.name || "";
     attrQI.value = numOr0(s?.attributes?.QI);
@@ -362,12 +629,24 @@ function initGM(){
     attrDEX.value = numOr0(s?.attributes?.DEX);
     attrVIG.value = numOr0(s?.attributes?.VIG);
     mentalEl.value = intOr0(s?.mental);
+
+    currentSheetDraft = {
+      items: ensureObj(s?.items),
+      advantages: ensureObj(s?.advantages),
+      disadvantages: ensureObj(s?.disadvantages)
+    };
+
     $("#sheetFormTitle").textContent = `Editar: ${s.name || id}`;
+    renderEntryLists();
+    if(userAction){
+      clearEntryEditor();
+      setStatus("Ficha carregada.", "ok");
+    }
   }
 
   btnNewSheet.addEventListener("click", () => {
     clearForm();
-    setStatus("Criando nova ficha (form limpo).", "ok");
+    setStatus("Nova ficha (draft).", "ok");
   });
 
   sheetForm.addEventListener("submit", async (ev) => {
@@ -375,11 +654,35 @@ function initGM(){
     try{
       if(!meta || meta.gmUid !== userUid) return setStatus("Sem permissão.", "err");
 
-      const id = sheetIdEl.value || push(ref(db, `rooms/${roomId}/sheets`)).key;
-      const exists = Boolean(sheets[id]);
-
       const name = String(sheetNameEl.value || "").trim();
       if(!name) return setStatus("Nome é obrigatório.", "err");
+
+      const desiredSlug = slugify(name);
+      if(!desiredSlug) return setStatus("Nome inválido para gerar slug.", "err");
+
+      const oldId = sheetIdEl.value || "";
+      let finalId = desiredSlug;
+
+      // If creating new OR renaming to different slug, resolve conflict
+      if(!oldId){
+        setStatus("Resolvendo slug...", "warn");
+        finalId = await resolveSlugForCreate(desiredSlug);
+      }else if(oldId !== desiredSlug){
+        setStatus("Renomeando (slug mudou)...", "warn");
+        // check if desired exists and isn't old
+        const existsSnap = await get(ref(db, `rooms/${roomId}/sheets/${desiredSlug}`));
+        if(existsSnap.exists()){
+          const overwrite = confirm(`Já existe uma ficha com ID "${desiredSlug}".\n\nOK = sobrescrever (MERGE)\nCancelar = criar com sufixo (-2, -3...)`);
+          if(overwrite) finalId = desiredSlug;
+          else finalId = await nextAvailableSlug(desiredSlug);
+        }else{
+          finalId = desiredSlug;
+        }
+      }else{
+        finalId = oldId;
+      }
+
+      const ts = serverTimestamp();
 
       const payload = {
         name,
@@ -390,17 +693,36 @@ function initGM(){
           VIG: asNum(attrVIG.value, 0),
         },
         mental: asInt(mentalEl.value, 0),
-        // keep arrays for compatibility with player view (even if empty)
-        items: exists ? (sheets[id]?.items || []) : [],
-        advantages: exists ? (sheets[id]?.advantages || []) : [],
-        disadvantages: exists ? (sheets[id]?.disadvantages || []) : [],
-        createdAt: exists ? (sheets[id]?.createdAt || serverTimestamp()) : serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        items: ensureObj(currentSheetDraft?.items),
+        advantages: ensureObj(currentSheetDraft?.advantages),
+        disadvantages: ensureObj(currentSheetDraft?.disadvantages),
+        createdAt: oldId && sheets[oldId]?.createdAt ? (sheets[oldId].createdAt) : ts,
+        updatedAt: ts,
       };
 
-      await set(ref(db, `rooms/${roomId}/sheets/${id}`), payload);
-      sheetIdEl.value = id;
-      setStatus("Ficha salva.", "ok");
+      // Multi-path update to handle rename (move)
+      const updates = {};
+      updates[`rooms/${roomId}/sheets/${finalId}`] = payload;
+
+      // If oldId exists and changed, delete old and also update assignments pointing to oldId
+      if(oldId && oldId !== finalId){
+        updates[`rooms/${roomId}/sheets/${oldId}`] = null;
+
+        // update assignments that reference oldId -> newId (best effort)
+        const asSnap = await get(ref(db, `rooms/${roomId}/assignments`));
+        const asObj = asSnap.val() || {};
+        for(const [uid, a] of Object.entries(asObj)){
+          if(a?.sheetId === oldId){
+            updates[`rooms/${roomId}/assignments/${uid}/sheetId`] = finalId;
+          }
+        }
+      }
+
+      await update(ref(db), updates);
+
+      sheetIdEl.value = finalId;
+      currentSheetId = finalId;
+      setStatus(`Ficha salva: ${finalId}`, "ok");
     }catch(e){
       console.error(e);
       setStatus(`Erro ao salvar: ${e?.message || e}`, "err");
@@ -413,7 +735,19 @@ function initGM(){
       if(!id) return setStatus("Nenhuma ficha selecionada.", "warn");
       if(!sheets[id]) return setStatus("Ficha já não existe.", "warn");
 
-      await set(ref(db, `rooms/${roomId}/sheets/${id}`), null);
+      // also clear assignments pointing to it (best effort)
+      const asSnap = await get(ref(db, `rooms/${roomId}/assignments`));
+      const asObj = asSnap.val() || {};
+
+      const updates = {};
+      updates[`rooms/${roomId}/sheets/${id}`] = null;
+      for(const [uid, a] of Object.entries(asObj)){
+        if(a?.sheetId === id){
+          updates[`rooms/${roomId}/assignments/${uid}`] = null;
+        }
+      }
+      await update(ref(db), updates);
+
       clearForm();
       setStatus("Ficha deletada.", "ok");
     }catch(e){
@@ -436,7 +770,6 @@ function initGM(){
     }
   });
 
-  // Import JSON handling
   importFile.addEventListener("change", async () => {
     const f = importFile.files?.[0];
     if(!f) return;
@@ -458,45 +791,40 @@ function initGM(){
       importReport.textContent = JSON.stringify(report, null, 2);
       if(!report.ok) return setStatus("Corrija os erros antes de importar.", "err");
 
+      const mode = importMode.value === "CREATE_ONLY" ? "CREATE_ONLY" : "MERGE";
+
       setStatus("Carregando estado atual...", "warn");
       const sheetsSnap = await get(ref(db, `rooms/${roomId}/sheets`));
       const existing = sheetsSnap.val() || {};
       const existingIds = new Set(Object.keys(existing));
 
-      const mode = importMode.value === "CREATE_ONLY" ? "CREATE_ONLY" : "MERGE";
       const ts = serverTimestamp();
-
       const updates = {};
+
       for(const entry of report.normalizedSheets){
-        let id = entry.sheetId || push(ref(db, `rooms/${roomId}/sheets`)).key;
+        const baseSlug = entry.sheetIdSlug;
+        const finalSlug = await resolveSlugForImport(baseSlug, mode, existingIds);
+        existingIds.add(finalSlug);
 
-        if(mode === "CREATE_ONLY"){
-          // if sheetId existed in input or generated collides, always create new
-          if(entry.sheetId && existingIds.has(entry.sheetId)){
-            id = push(ref(db, `rooms/${roomId}/sheets`)).key;
-          }else if(existingIds.has(id)){
-            id = push(ref(db, `rooms/${roomId}/sheets`)).key;
-          }
-        }else{
-          // MERGE
-          if(!id) id = push(ref(db, `rooms/${roomId}/sheets`)).key;
-        }
+        const itemsObj = arrayToObject(entry.items, "items");
+        const advObj = arrayToObject(entry.advantages, "advantages");
+        const disObj = arrayToObject(entry.disadvantages, "disadvantages");
 
-        const prev = existing[id] || null;
+        const prev = existing[finalSlug] || null;
         const createdAt = prev?.createdAt || ts;
 
         const payload = {
           name: entry.name,
           attributes: entry.attributes,
           mental: entry.mental,
-          items: entry.items,
-          advantages: entry.advantages,
-          disadvantages: entry.disadvantages,
+          items: itemsObj,
+          advantages: advObj,
+          disadvantages: disObj,
           createdAt,
           updatedAt: ts
         };
 
-        updates[`rooms/${roomId}/sheets/${id}`] = payload;
+        updates[`rooms/${roomId}/sheets/${finalSlug}`] = payload;
       }
 
       if(Object.keys(updates).length === 0){
@@ -504,7 +832,7 @@ function initGM(){
         return;
       }
 
-      setStatus(`Importando ${Object.keys(updates).length} fichas...`, "warn");
+      setStatus(`Importando ${report.normalizedSheets.length} fichas...`, "warn");
       await update(ref(db), updates);
       setStatus("Import concluído.", "ok");
     }catch(e){
@@ -512,6 +840,19 @@ function initGM(){
       setStatus(`Erro no import: ${e?.message || e}`, "err");
     }
   });
+
+  function arrayToObject(arr, category){
+    const a = Array.isArray(arr) ? arr : [];
+    const out = {};
+    for(const raw of a){
+      const id = push(ref(db, `rooms/${roomId}/sheets/_tmp/${category}`)).key;
+      const payload = normalizeEntryPayload(raw);
+      if(!payload.name) continue;
+      // For items, ignores uses* if empty
+      out[id] = payload;
+    }
+    return out;
+  }
 
   async function validateImport(){
     const rawText = String(importText.value || "").trim();
@@ -534,13 +875,16 @@ function initGM(){
         return;
       }
 
-      const sheetId = typeof s.sheetId === "string" ? s.sheetId.trim() : "";
       const name = typeof s.name === "string" ? s.name.trim() : "";
       if(!name) errors.push(`sheets[${idx}].name obrigatório (string).`);
 
+      const sheetIdRaw = (typeof s.sheetId === "string") ? s.sheetId.trim() : "";
+      const sheetIdSlug = slugify(sheetIdRaw || name);
+      if(!sheetIdSlug) errors.push(`sheets[${idx}] slug inválido (name/sheetId).`);
+
       const a = s.attributes;
       const attrs = { QI:0, FOR:0, DEX:0, VIG:0 };
-      if(a && typeof a === "object"){
+      if(a && typeof a === "object" && !Array.isArray(a)){
         for(const k of ["QI","FOR","DEX","VIG"]){
           const v = a[k];
           if(v === undefined) continue;
@@ -552,9 +896,7 @@ function initGM(){
       }
 
       const mental = s.mental;
-      if(mental === undefined){
-        // ok default 0
-      }else{
+      if(mental !== undefined){
         if(typeof mental !== "number" || !Number.isFinite(mental) || Math.trunc(mental) !== mental){
           errors.push(`sheets[${idx}].mental deve ser int.`);
         }
@@ -564,9 +906,46 @@ function initGM(){
       const advantages = Array.isArray(s.advantages) ? s.advantages : [];
       const disadvantages = Array.isArray(s.disadvantages) ? s.disadvantages : [];
 
-      // ignore unknown fields by only taking known ones
+      // validate entries minimally (types coerced later)
+      for(const [cat, arr] of [["items",items],["advantages",advantages],["disadvantages",disadvantages]]){
+        if(!Array.isArray(arr)){
+          errors.push(`sheets[${idx}].${cat} deve ser array.`);
+          continue;
+        }
+        arr.forEach((e, j)=>{
+          if(!e || typeof e !== "object"){
+            errors.push(`sheets[${idx}].${cat}[${j}] deve ser objeto.`);
+            return;
+          }
+          if(typeof e.name !== "string" || !e.name.trim()){
+            errors.push(`sheets[${idx}].${cat}[${j}].name obrigatório.`);
+          }
+          if(e.type !== "ATIVA" && e.type !== "PASSIVA"){
+            errors.push(`sheets[${idx}].${cat}[${j}].type deve ser ATIVA|PASSIVA.`);
+          }
+          if(e.atributoBase !== null && e.atributoBase !== undefined && e.atributoBase !== "" && !["QI","FOR","DEX","VIG"].includes(e.atributoBase)){
+            errors.push(`sheets[${idx}].${cat}[${j}].atributoBase inválido.`);
+          }
+          if(e.modMode !== undefined && !["SOMA","MULT","NONE"].includes(e.modMode)){
+            errors.push(`sheets[${idx}].${cat}[${j}].modMode inválido.`);
+          }
+          if(e.modMode && e.modMode !== "NONE" && e.modValue !== undefined){
+            const mv = Number(e.modValue);
+            if(!Number.isFinite(mv)) errors.push(`sheets[${idx}].${cat}[${j}].modValue deve ser número.`);
+          }
+          if(e.usesCurrent !== undefined && e.usesCurrent !== null && e.usesCurrent !== ""){
+            const uc = Number(e.usesCurrent);
+            if(!Number.isFinite(uc) || Math.trunc(uc) !== uc) errors.push(`sheets[${idx}].${cat}[${j}].usesCurrent deve ser int.`);
+          }
+          if(e.usesMax !== undefined && e.usesMax !== null && e.usesMax !== ""){
+            const um = Number(e.usesMax);
+            if(!Number.isFinite(um) || Math.trunc(um) !== um) errors.push(`sheets[${idx}].${cat}[${j}].usesMax deve ser int.`);
+          }
+        });
+      }
+
       normalizedSheets.push({
-        sheetId: sheetId || "",
+        sheetIdSlug,
         name,
         attributes: attrs,
         mental: mental === undefined ? 0 : Math.trunc(mental),
@@ -592,23 +971,20 @@ function initGM(){
     const n = Number(v);
     return Number.isFinite(n) ? Math.trunc(n) : 0;
   }
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, (c) => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[c]));
-  }
+
+  // init form empty
+  clearForm();
 }
 
 /** --------------------------
- * player.html
+ * Player
  * -------------------------- */
 function initPlayer(){
   const roomId = mustRoomId();
 
   const roomCodeOut = $("#roomCodeOut");
   const uidOut = $("#uidOut");
-  const btnSignOut = $("#btnSignOut");
-  btnSignOut.addEventListener("click", async () => {
+  $("#btnSignOut").addEventListener("click", async () => {
     await signOut(auth);
     location.href = "../index.html";
   });
@@ -618,6 +994,8 @@ function initPlayer(){
   const gradeSelect = $("#gradeSelect");
   const rollOut = $("#rollOut");
   const diceOut = $("#diceOut");
+
+  const modsActive = $("#modsActive");
 
   const itemsList = $("#itemsList");
   const advantagesList = $("#advantagesList");
@@ -633,9 +1011,12 @@ function initPlayer(){
   const DT_BY_GRADE = { G0:6, G1:9, G2:12, G3:15, G4:21, G5:27, G6:33 };
 
   let uid = null;
-  let assignedSheetId = null;
+  let assignedSheetId = null; // slug
   let sheet = null;
   let meta = null;
+
+  // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
+  const selectedPassives = new Map();
 
   (async ()=>{
     setStatus("Autenticando...", "warn");
@@ -652,20 +1033,17 @@ function initPlayer(){
     meta = metaSnap.val();
     roomCodeOut.textContent = meta.code || "?";
 
-    // Assignment for current user
     setStatus("Carregando atribuição...", "warn");
-    onValue(ref(db, `rooms/${roomId}/assignments/${uid}`), async (snap) => {
+    onValue(ref(db, `rooms/${roomId}/assignments/${uid}`), (snap) => {
       const val = snap.val();
       assignedSheetId = val?.sheetId || null;
 
+      selectedPassives.clear();
+      renderModsActive();
+
       if(!assignedSheetId){
         sheet = null;
-        charName.textContent = "(sem ficha atribuída)";
-        mentalOut.textContent = "0";
-        for(const k of Object.keys(attrSpans)) attrSpans[k].textContent = "0";
-        itemsList.innerHTML = "";
-        advantagesList.innerHTML = "";
-        disadvantagesList.innerHTML = "";
+        renderEmpty();
         setStatus("Sem ficha atribuída. Peça ao GM para atribuir.", "warn");
         return;
       }
@@ -674,6 +1052,7 @@ function initPlayer(){
       onValue(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}`), (s2) => {
         if(!s2.exists()){
           sheet = null;
+          renderEmpty();
           setStatus("Ficha atribuída não existe mais.", "err");
           return;
         }
@@ -683,12 +1062,8 @@ function initPlayer(){
       });
     });
 
-    // Bind attr buttons
-    $$(".btn.attr").forEach(btn => {
-      btn.addEventListener("click", () => rollAttribute(btn.dataset.attr));
-    });
+    $$(".btn.attr").forEach(btn => btn.addEventListener("click", () => rollAttribute(btn.dataset.attr)));
 
-    // Bind dice buttons
     $$(".btn.die").forEach(btn => {
       btn.addEventListener("click", () => {
         const n = Number(btn.dataset.die);
@@ -703,6 +1078,18 @@ function initPlayer(){
     setStatus(`Erro: ${e?.message || e}`, "err");
   });
 
+  function ensureObj(x){ return (x && typeof x === "object" && !Array.isArray(x)) ? x : {}; }
+
+  function renderEmpty(){
+    charName.textContent = "(sem ficha)";
+    mentalOut.textContent = "0";
+    for(const k of Object.keys(attrSpans)) attrSpans[k].textContent = "0";
+    itemsList.innerHTML = "";
+    advantagesList.innerHTML = "";
+    disadvantagesList.innerHTML = "";
+    rollOut.textContent = "";
+  }
+
   function renderSheet(){
     const name = sheet?.name || "(sem nome)";
     const m = asInt(sheet?.mental, 0);
@@ -715,76 +1102,271 @@ function initPlayer(){
     attrSpans.DEX.textContent = String(asNum(attrs.DEX, 0));
     attrSpans.VIG.textContent = String(asNum(attrs.VIG, 0));
 
-    renderList(itemsList, sheet?.items);
-    renderList(advantagesList, sheet?.advantages);
-    renderList(disadvantagesList, sheet?.disadvantages);
+    renderCategory(itemsList, "items", ensureObj(sheet?.items));
+    renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
+    renderCategory(disadvantagesList, "disadvantages", ensureObj(sheet?.disadvantages));
+
+    renderModsActive();
   }
 
-  function renderList(ul, arr){
-    ul.innerHTML = "";
-    const a = Array.isArray(arr) ? arr : [];
-    if(a.length === 0){
-      const li = document.createElement("li");
-      li.className = "muted";
-      li.textContent = "(vazio)";
-      ul.appendChild(li);
+  function renderModsActive(){
+    modsActive.innerHTML = "";
+    if(selectedPassives.size === 0){
+      modsActive.innerHTML = '<div class="muted">(nenhum)</div>';
       return;
     }
-    a.forEach((x)=>{
-      const li = document.createElement("li");
-      li.textContent = typeof x === "string" ? x : JSON.stringify(x);
-      ul.appendChild(li);
-    });
+    for(const [key, p] of selectedPassives.entries()){
+      const div = document.createElement("div");
+      div.className = "item";
+      const mv = (p.modMode === "NONE" || p.modValue === null || p.modValue === undefined) ? "0" : String(p.modValue);
+      div.innerHTML = `
+        <div class="meta">
+          <div class="title">${escapeHtml(p.name)}</div>
+          <div class="sub">${escapeHtml(p.category)} • <code>${escapeHtml(p.id)}</code></div>
+          <div class="kv">
+            <span class="badge">PASSIVA</span>
+            ${p.atributoBase ? `<span class="badge">${escapeHtml(p.atributoBase)}</span>` : `<span class="badge">sem atributo</span>`}
+            <span class="badge">${escapeHtml(p.modMode)}</span>
+            ${p.modMode !== "NONE" ? `<span class="badge">${escapeHtml(mv)}</span>` : ""}
+          </div>
+        </div>
+        <div class="row" style="margin:0">
+          <button class="btn small danger" data-rm="1">Remover</button>
+        </div>
+      `;
+      div.querySelector("[data-rm]").addEventListener("click", ()=>{
+        selectedPassives.delete(key);
+        renderModsActive();
+        setStatus("Mod removido.", "ok");
+      });
+      modsActive.appendChild(div);
+    }
+  }
+
+  function renderCategory(container, category, obj){
+    container.innerHTML = "";
+    const entries = Object.entries(obj || {});
+    if(entries.length === 0){
+      container.innerHTML = '<div class="muted">(vazio)</div>';
+      return;
+    }
+
+    entries
+      .sort((a,b)=> (a[1]?.name || "").localeCompare(b[1]?.name || ""))
+      .forEach(([id, e]) => {
+        const type = (e?.type === "ATIVA") ? "ATIVA" : "PASSIVA";
+        const attrBase = (["QI","FOR","DEX","VIG"].includes(e?.atributoBase)) ? e.atributoBase : null;
+        const modMode = (e?.modMode === "SOMA" || e?.modMode === "MULT" || e?.modMode === "NONE") ? e.modMode : "NONE";
+        const modValue = (modMode === "NONE") ? null : (Number.isFinite(Number(e?.modValue)) ? Number(e.modValue) : 0);
+
+        const uses = (e?.usesCurrent !== null && e?.usesCurrent !== undefined) || (e?.usesMax !== null && e?.usesMax !== undefined)
+          ? `<span class="badge">uses ${e?.usesCurrent ?? "?"}/${e?.usesMax ?? "?"}</span>`
+          : "";
+
+        const badges = `
+          <span class="badge">${type}</span>
+          ${attrBase ? `<span class="badge">${escapeHtml(attrBase)}</span>` : `<span class="badge">sem atributo</span>`}
+          <span class="badge">${escapeHtml(modMode)}</span>
+          ${modMode !== "NONE" ? `<span class="badge">${escapeHtml(String(modValue))}</span>` : ""}
+          ${uses}
+        `;
+
+        const div = document.createElement("div");
+        div.className = "item";
+
+        if(type === "ATIVA"){
+          div.innerHTML = `
+            <div class="meta">
+              <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
+              <div class="sub"><code>${escapeHtml(id)}</code></div>
+              <div class="kv">${badges}</div>
+            </div>
+            <div class="row" style="margin:0">
+              <button class="btn small primary" data-roll="1">Rolar</button>
+            </div>
+          `;
+          div.querySelector("[data-roll]").addEventListener("click", ()=>{
+            rollActive({ category, id, entry: { name: e?.name || "(sem nome)", atributoBase: attrBase, modMode, modValue } });
+          });
+        }else{
+          const key = `${category}:${id}`;
+          const checked = selectedPassives.has(key);
+          div.innerHTML = `
+            <div class="meta">
+              <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
+              <div class="sub"><code>${escapeHtml(id)}</code></div>
+              <div class="kv">${badges}</div>
+            </div>
+            <div class="row" style="margin:0">
+              <label class="toggle">
+                <input type="checkbox" ${checked ? "checked" : ""} />
+                <span>Usar como mod</span>
+              </label>
+            </div>
+          `;
+          const cb = div.querySelector("input[type=checkbox]");
+          cb.addEventListener("change", ()=>{
+            if(cb.checked){
+              selectedPassives.set(key, {
+                category,
+                id,
+                name: e?.name || "(sem nome)",
+                modMode,
+                modValue,
+                atributoBase: attrBase
+              });
+              setStatus("Mod ativo.", "ok");
+            }else{
+              selectedPassives.delete(key);
+              setStatus("Mod removido.", "ok");
+            }
+            renderModsActive();
+          });
+        }
+
+        container.appendChild(div);
+      });
   }
 
   function mentalBonuses(mental){
-    // Only these cases in MVP
     let diceBonus = 0;
     let dtBonus = 0;
     if(mental === 4) diceBonus = 5;
     else if(mental === 5) dtBonus = -3;
     else if(mental === -8 || mental === -9) diceBonus = -5;
     else if(mental === -10 || mental === -11){
-      // no effect in MVP
+      // sem efeito no MVP
     }
     return { diceBonus, dtBonus };
   }
 
-  function rollAttribute(attrKey){
+  function getSelectedPassiveMods(){
+    let soma = 0;
+    let mult = 0;
+    const applied = [];
+    for(const p of selectedPassives.values()){
+      if(p.modMode === "SOMA"){
+        const v = Number(p.modValue) || 0;
+        if(v !== 0){
+          soma += v;
+          applied.push({ name: p.name, mode:"SOMA", value:v });
+        }
+      }else if(p.modMode === "MULT"){
+        const v = Number(p.modValue) || 0;
+        if(v !== 0){
+          mult += v;
+          applied.push({ name: p.name, mode:"MULT", value:v });
+        }
+      }
+    }
+    return { soma, mult, applied };
+  }
+
+  function dtFromGrade(){
+    const grade = gradeSelect.value || "G0";
+    return { grade, dt: DT_BY_GRADE[grade] ?? 6 };
+  }
+
+  function rollCore({ title, baseAttrKey, baseAttrValue, activeMod, activeLabel }){
     if(!sheet){
       setStatus("Sem ficha carregada.", "err");
       return;
     }
-
-    const attrs = sheet.attributes || {};
-    const attrVal = asNum(attrs[attrKey], 0);
     const mental = asInt(sheet.mental, 0);
-
-    const grade = gradeSelect.value || "G0";
-    const DT = DT_BY_GRADE[grade] ?? 6;
+    const { diceBonus, dtBonus } = mentalBonuses(mental);
+    const { grade, dt } = dtFromGrade();
 
     const d12 = buildDice(12);
-    const { diceBonus, dtBonus } = mentalBonuses(mental);
 
-    const subtotal = d12 + diceBonus + attrVal + 0;
+    const pass = getSelectedPassiveMods();
+    const somaPass = pass.soma;
+    const multPass = pass.mult;
+
+    let somaAtiva = 0;
+    let multAtiva = 0;
+
+    if(activeMod){
+      if(activeMod.mode === "SOMA") somaAtiva = Number(activeMod.value) || 0;
+      if(activeMod.mode === "MULT") multAtiva = Number(activeMod.value) || 0;
+    }
+
+    const subtotal = d12 + diceBonus + baseAttrValue + somaPass + somaAtiva;
+
+    const multValue = multPass + multAtiva;
+    const hasMult = (multValue !== 0);
+    let totalFinal = hasMult ? Math.floor(subtotal * (1 + multValue)) : subtotal;
+
     const isCrit = (d12 === 12);
-    const totalFinal = isCrit ? Math.floor(subtotal * 1.5) : subtotal;
-    const success = totalFinal >= (DT + dtBonus);
+    if(isCrit) totalFinal = Math.floor(totalFinal * 1.5);
 
-    rollOut.textContent =
-`Atributo: ${attrKey}
-Grau: ${grade}  (DT ${DT})
-Mental: ${mental}
+    const dtFinal = dt + dtBonus;
+    const success = totalFinal >= dtFinal;
 
-d12: ${d12}
-atributo: ${attrVal}
-diceBonus: ${diceBonus}
-dtBonus: ${dtBonus}
+    const lines = [];
+    lines.push(`${title}`);
+    lines.push(`Grau: ${grade} (DT ${dt})`);
+    lines.push(`Mental: ${mental}`);
+    lines.push("");
+    lines.push(`d12: ${d12}`);
+    lines.push(`diceBonus (mental): ${diceBonus}`);
+    lines.push(`${baseAttrKey ? "atributo" : "atributo"}: ${baseAttrKey ? baseAttrKey : "(nenhum)"} = ${baseAttrValue}`);
+    if(somaPass !== 0) lines.push(`passivas SOMA: ${somaPass}`);
+    if(somaAtiva !== 0) lines.push(`ativa SOMA: ${somaAtiva} (${activeLabel})`);
+    lines.push(`subtotal: ${subtotal}`);
+    if(hasMult) lines.push(`MULT total: ${multValue}  -> floor(subtotal * (1 + mult))`);
+    lines.push(`crítico?: ${isCrit ? "SIM (d12=12)" : "NÃO"}`);
+    lines.push(`totalFinal: ${totalFinal}`);
+    lines.push("");
+    lines.push(`dtBonus (mental): ${dtBonus}`);
+    lines.push(`DT final: ${dtFinal}`);
+    lines.push(`sucesso?: ${success ? "SIM" : "NÃO"}`);
 
-subtotal: ${subtotal}
-crítico?: ${isCrit ? "SIM (d12=12)" : "NÃO"}
-totalFinal: ${totalFinal}
+    if(pass.applied.length){
+      lines.push("");
+      lines.push("Passivas aplicadas:");
+      for(const p of pass.applied){
+        const sign = p.value > 0 ? "+" : "";
+        lines.push(`- ${p.name}: ${p.mode} ${sign}${p.value}`);
+      }
+    }
+    if(activeMod && (activeMod.value || 0) !== 0){
+      lines.push("");
+      const sign = activeMod.value > 0 ? "+" : "";
+      lines.push(`Ativa aplicada: ${activeLabel} (${activeMod.mode} ${sign}${activeMod.value})`);
+    }
 
-sucesso?: ${success ? "SIM" : "NÃO"}  (meta: >= ${DT + dtBonus})`;
+    rollOut.textContent = lines.join("\n");
+  }
+
+  function rollAttribute(attrKey){
+    if(!sheet) return;
+    const attrs = sheet.attributes || {};
+    const attrVal = asNum(attrs[attrKey], 0);
+    rollCore({
+      title: `Rolagem de Atributo: ${attrKey}`,
+      baseAttrKey: attrKey,
+      baseAttrValue: attrVal,
+      activeMod: null,
+      activeLabel: ""
+    });
+  }
+
+  function rollActive({ category, id, entry }){
+    const attrs = sheet?.attributes || {};
+    const baseAttrKey = entry.atributoBase || null;
+    const baseAttrValue = baseAttrKey ? asNum(attrs[baseAttrKey], 0) : 0;
+
+    const activeMod = {
+      mode: entry.modMode,
+      value: entry.modMode === "NONE" ? 0 : (Number(entry.modValue) || 0)
+    };
+
+    rollCore({
+      title: `Rolagem ATIVA: ${entry.name}`,
+      baseAttrKey,
+      baseAttrValue,
+      activeMod,
+      activeLabel: `${category}/${id}`
+    });
   }
 }

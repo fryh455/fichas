@@ -25,7 +25,7 @@
     </section>
 
     <section class="card">
-      <h2>Fichas (CRUD)</h2>
+      <h2>Fichas (CRUD) — ID = slug(name)</h2>
 
       <div class="split">
         <div>
@@ -34,6 +34,7 @@
             <button id="btnNewSheet" class="btn small">+ Nova ficha</button>
           </div>
           <div id="sheetsList" class="list"></div>
+          <small class="hint muted">Ao criar/renomear, o ID é slug do nome. Se colidir, você escolhe sobrescrever ou sufixo -2/-3…</small>
         </div>
 
         <div>
@@ -75,7 +76,116 @@
               <button id="btnDeleteSheet" type="button" class="btn danger">Deletar</button>
             </div>
 
-            <small class="hint muted">Itens/vantagens/desvantagens não são editados no MVP (apenas no import).</small>
+            <details class="details">
+              <summary>Itens</summary>
+              <div class="row between">
+                <strong>Lista</strong>
+                <button id="btnAddItem" type="button" class="btn small">+ Adicionar</button>
+              </div>
+              <div id="itemsCrudList" class="list"></div>
+            </details>
+
+            <details class="details">
+              <summary>Vantagens</summary>
+              <div class="row between">
+                <strong>Lista</strong>
+                <button id="btnAddAdv" type="button" class="btn small">+ Adicionar</button>
+              </div>
+              <div id="advantagesCrudList" class="list"></div>
+            </details>
+
+            <details class="details">
+              <summary>Desvantagens</summary>
+              <div class="row between">
+                <strong>Lista</strong>
+                <button id="btnAddDis" type="button" class="btn small">+ Adicionar</button>
+              </div>
+              <div id="disadvantagesCrudList" class="list"></div>
+            </details>
+
+            <details class="details">
+              <summary>Editor de registro selecionado</summary>
+              <div class="grid">
+                <label class="field">
+                  <span>Categoria</span>
+                  <select id="entryCategory">
+                    <option value="items">Itens</option>
+                    <option value="advantages">Vantagens</option>
+                    <option value="disadvantages">Desvantagens</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>ID interno</span>
+                  <input id="entryId" type="text" readonly />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Nome</span>
+                <input id="entryName" type="text" maxlength="80" />
+              </label>
+
+              <div class="grid">
+                <label class="field">
+                  <span>Type</span>
+                  <select id="entryType">
+                    <option value="ATIVA">ATIVA</option>
+                    <option value="PASSIVA">PASSIVA</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Atributo base</span>
+                  <select id="entryAttrBase">
+                    <option value="">(nenhum)</option>
+                    <option value="QI">QI</option>
+                    <option value="FOR">FOR</option>
+                    <option value="DEX">DEX</option>
+                    <option value="VIG">VIG</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="grid">
+                <label class="field">
+                  <span>modMode</span>
+                  <select id="entryModMode">
+                    <option value="SOMA">SOMA</option>
+                    <option value="MULT">MULT</option>
+                    <option value="NONE">NONE</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>modValue (number)</span>
+                  <input id="entryModValue" type="number" step="0.1" />
+                </label>
+              </div>
+
+              <div class="grid">
+                <label class="field">
+                  <span>usesCurrent</span>
+                  <input id="entryUsesCurrent" type="number" step="1" />
+                </label>
+                <label class="field">
+                  <span>usesMax</span>
+                  <input id="entryUsesMax" type="number" step="1" />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>notes</span>
+                <textarea id="entryNotes" rows="4"></textarea>
+              </label>
+
+              <div class="row">
+                <button id="btnSaveEntry" type="button" class="btn primary">Salvar registro</button>
+                <button id="btnDeleteEntry" type="button" class="btn danger">Deletar registro</button>
+                <button id="btnClearEntry" type="button" class="btn">Limpar seleção</button>
+              </div>
+
+              <small class="hint muted">usesCurrent/usesMax são exibidos no player (sem lógica pesada). Para itens, pode deixar vazio.</small>
+            </details>
+
           </form>
         </div>
       </div>
@@ -104,8 +214,7 @@
       <div class="grid">
         <label class="field">
           <span>Colar JSON</span>
-          <textarea id="importText" rows="10" placeholder='{"sheets":[{"name":"Nome","attributes":{"QI":1,"FOR":1,"DEX":1,"VIG":1},"mental":0,"items":[],"advantages":[],"disadvantages":[]}]}'
-          ></textarea>
+          <textarea id="importText" rows="10" placeholder='{"sheets":[{"name":"Nome","attributes":{"QI":1,"FOR":1,"DEX":1,"VIG":1},"mental":0,"items":[...],"advantages":[...],"disadvantages":[...]}]}'></textarea>
         </label>
         <label class="field">
           <span>Upload .json</span>
@@ -118,8 +227,8 @@
         <label class="field">
           <span>Modo</span>
           <select id="importMode">
-            <option value="MERGE">MERGE</option>
-            <option value="CREATE_ONLY">CREATE-ONLY</option>
+            <option value="MERGE">MERGE (sobrescreve pelo slug final)</option>
+            <option value="CREATE_ONLY">CREATE-ONLY (sempre cria novo slug com sufixo)</option>
           </select>
         </label>
       </div>
@@ -134,7 +243,7 @@
         <pre id="importReport" class="pre"></pre>
       </details>
 
-      <small class="hint muted">Importa usando multi-location update para performance.</small>
+      <small class="hint muted">Import usa multi-location update para performance.</small>
     </section>
   </main>
 

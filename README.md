@@ -48,27 +48,33 @@ Projeto **100% HTML/CSS/JS puro**, sem bundler. Funciona via Live Server abrindo
 7) Player rolar dados soltos
 8) Import JSON (MERGE / CREATE-ONLY)
 
-## Formato do import (GM)
+## Formato do import (GM) — novo modelo
 
 ```json
 {
   "sheets":[
     {
-      "sheetId":"opcional",
       "name":"Nome",
+      "sheetId":"opcional (se vier, vira slug final após normalização)",
       "attributes":{"QI":1,"FOR":1,"DEX":1,"VIG":1},
       "mental":0,
-      "items":[],
-      "advantages":[],
-      "disadvantages":[]
+      "items":[
+        {"name":"Espada","type":"ATIVA","atributoBase":"FOR","modMode":"SOMA","modValue":2,"notes":"..."}
+      ],
+      "advantages":[
+        {"name":"Foco","type":"PASSIVA","atributoBase":null,"modMode":"MULT","modValue":0.5,"usesCurrent":null,"usesMax":null,"notes":null}
+      ],
+      "disadvantages":[
+        {"name":"Ferimento","type":"PASSIVA","atributoBase":null,"modMode":"SOMA","modValue":-2,"notes":"..."}
+      ]
     }
   ]
 }
 ```
 
 Regras:
-- Campos desconhecidos são ignorados.
-- Tipos são validados.
-- `MERGE`: se `sheetId` existir → sobrescreve a ficha daquele id; senão cria.
-- `CREATE-ONLY`: se `sheetId` existir → gera novo id e cria como novo.
-- Import usa `update()` multi-path para performance.
+- `sheetId` final = `slugify(name)` por padrão (ou slugify(sheetId) se vier).
+- Conflitos:
+  - `MERGE`: sobrescreve/merge no slug final.
+  - `CREATE-ONLY`: cria novo slug com sufixo `-2`, `-3`...
+- Arrays de itens/vantagens/desvantagens podem ser convertidos para objetos no RTDB.

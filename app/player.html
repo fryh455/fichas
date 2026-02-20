@@ -47,33 +47,41 @@
         </label>
       </div>
 
+      <h3>Atributos</h3>
       <div class="grid4">
         <button class="btn attr" data-attr="QI">QI: <span id="aQI">0</span></button>
         <button class="btn attr" data-attr="FOR">FOR: <span id="aFOR">0</span></button>
         <button class="btn attr" data-attr="DEX">DEX: <span id="aDEX">0</span></button>
         <button class="btn attr" data-attr="VIG">VIG: <span id="aVIG">0</span></button>
       </div>
+      <small class="hint muted">Clique em um atributo para rolar.</small>
+    </section>
 
-      <div class="split smallgap">
-        <div>
-          <h3>Itens</h3>
-          <ul id="itemsList" class="bullets"></ul>
-        </div>
-        <div>
-          <h3>Vantagens</h3>
-          <ul id="advantagesList" class="bullets"></ul>
-        </div>
-        <div>
-          <h3>Desvantagens</h3>
-          <ul id="disadvantagesList" class="bullets"></ul>
-        </div>
-      </div>
+    <section class="card">
+      <h2>Mods ativos (local)</h2>
+      <div id="modsActive" class="list"></div>
+      <small class="hint muted">Passivas marcadas como “usar como mod” entram aqui (não salva no banco).</small>
+    </section>
+
+    <section class="card">
+      <h2>Itens</h2>
+      <div id="itemsList" class="list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Vantagens</h2>
+      <div id="advantagesList" class="list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Desvantagens</h2>
+      <div id="disadvantagesList" class="list"></div>
     </section>
 
     <section class="card">
       <h2>Rolagem</h2>
       <div id="rollOut" class="pre"></div>
-      <small class="hint muted">Clique em um atributo para rolar 1d12 + atributo (+ mental bônus quando aplicável).</small>
+      <small class="hint muted">Atributo/Ativa rolam com Grau + mental + mods passivos selecionados.</small>
     </section>
 
     <section class="card">
