@@ -346,9 +346,6 @@ function initGM(){
   const attrVIG = $("#attrVIG");
   const mentalEl = $("#mental");
   const sharedNotesEl = $("#sharedNotes");
-
-  const hpCurrentEl = $("#hpCurrent");
-  const invCurrentEl = $("#invCurrent");
   const btnDeleteSheet = $("#btnDeleteSheet");
 
   const assignPlayer = $("#assignPlayer");
@@ -896,8 +893,20 @@ function initGM(){
         const asSnap = await get(ref(db, `rooms/${roomId}/assignments`));
         const asObj = asSnap.val() || {};
         for(const [uid, a] of Object.entries(asObj)){
+          // legacy: sheetId único
           if(a?.sheetId === oldId){
             updates[`rooms/${roomId}/assignments/${uid}/sheetId`] = finalId;
+          }
+
+          // novo: sheetIds map
+          const m = a?.sheetIds;
+          if(m && typeof m === "object" && !Array.isArray(m) && (m[oldId] === true || m[oldId] === 1 || m[oldId] === "true")){
+            updates[`rooms/${roomId}/assignments/${uid}/sheetIds/${oldId}`] = null;
+            updates[`rooms/${roomId}/assignments/${uid}/sheetIds/${finalId}`] = true;
+          }
+
+          if(a?.primarySheetId === oldId){
+            updates[`rooms/${roomId}/assignments/${uid}/primarySheetId`] = finalId;
           }
         }
       }
@@ -923,9 +932,41 @@ function initGM(){
 
       const updates = {};
       updates[`rooms/${roomId}/sheets/${id}`] = null;
+
       for(const [uid, a] of Object.entries(asObj)){
-        if(a?.sheetId === id){
-          updates[`rooms/${roomId}/assignments/${uid}`] = null;
+        const legacyId = (typeof a?.sheetId === "string") ? a.sheetId : null;
+
+        const m = a?.sheetIds;
+        const hasMap = (m && typeof m === "object" && !Array.isArray(m));
+        const mapKeys = hasMap
+          ? Object.keys(m).filter(k => k !== id && (m[k] === true || m[k] === 1 || m[k] === "true"))
+          : [];
+
+        const remainingLegacy = (legacyId && legacyId !== id) ? legacyId : null;
+
+        const willRemoveLegacy = (legacyId === id);
+        const willRemoveMap = hasMap && (m[id] === true || m[id] === 1 || m[id] === "true");
+
+        const remainingCount = (remainingLegacy ? 1 : 0) + mapKeys.length;
+
+        // se a atribuição só apontava pra essa ficha, remove toda a assignment
+        if(remainingCount === 0){
+          if(willRemoveLegacy || willRemoveMap){
+            updates[`rooms/${roomId}/assignments/${uid}`] = null;
+          }
+          continue;
+        }
+
+        if(willRemoveLegacy){
+          updates[`rooms/${roomId}/assignments/${uid}/sheetId`] = null;
+        }
+        if(willRemoveMap){
+          updates[`rooms/${roomId}/assignments/${uid}/sheetIds/${id}`] = null;
+        }
+
+        if(a?.primarySheetId === id){
+          const nextPrimary = remainingLegacy || mapKeys[0] || null;
+          updates[`rooms/${roomId}/assignments/${uid}/primarySheetId`] = nextPrimary;
         }
       }
 
@@ -944,8 +985,27 @@ function initGM(){
       const sheetId = assignSheet.value;
       if(!playerUid) return setStatus("Selecione um player.", "err");
       if(!sheetId) return setStatus("Selecione uma ficha.", "err");
-      await set(ref(db, `rooms/${roomId}/assignments/${playerUid}`), { sheetId });
-      setStatus("Atribuição salva.", "ok");
+
+      // multi-fichas: assignments/<uid> = { sheetIds: {<sheetId>: true}, primarySheetId }
+      const aRef = ref(db, `rooms/${roomId}/assignments/${playerUid}`);
+      const aSnap = await get(aRef);
+      const cur = aSnap.val() || {};
+
+      const sheetIds = ensureObj(cur.sheetIds);
+
+      // migração do formato antigo (sheetId único)
+      const legacy = (typeof cur.sheetId === "string" && cur.sheetId.trim()) ? cur.sheetId.trim() : null;
+      if(legacy) sheetIds[legacy] = true;
+
+      sheetIds[sheetId] = true;
+
+      const primary = (typeof cur.primarySheetId === "string" && cur.primarySheetId.trim())
+        ? cur.primarySheetId.trim()
+        : (legacy || sheetId);
+
+      await set(aRef, { sheetIds, primarySheetId: primary });
+
+      setStatus("Atribuição salva (multi-fichas).", "ok");
     }catch(e){
       console.error(e);
       setStatus(`Erro ao atribuir: ${e?.message || e}`, "err");
@@ -1226,6 +1286,8 @@ function initPlayer(){
     location.href = "../index.html";
   });
 
+  const sheetTabsEl = $("#sheetTabs");
+
   const charName = $("#charName");
   const mentalOut = $("#mentalOut");
   const rollOut = $("#rollOut");
@@ -1253,20 +1315,24 @@ function initPlayer(){
     invLimit: $("#statInv"),
     resHead: $("#resHead"),
     resTorso: $("#resTorso"),
-    resLimbs: $("#resLimbs"),
+    resLimb: $("#resLimb"),
     hpTotal: $("#hpTotal"),
   };
 
   let uid = null;
-  let assignedSheetId = null;
-  let sheet = null;
-  let plNotesUnsub = null;
-  let plNotesLocalEditing = false;
 
+  let assignedSheetIds = [];
+  let activeSheetId = null;
+
+  let sheet = null;
+  let sheetUnsub = null;
+  let notesUnsub = null;
+
+  let notesLocalEditing = false;
   let hpLocalEditing = false;
   let invLocalEditing = false;
-  let hpSaveTimer = null;
-  let invSaveTimer = null;
+
+  const sheetNameCache = new Map(); // sheetId -> name
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
   const selectedPassives = new Map();
@@ -1289,6 +1355,81 @@ function initPlayer(){
     if(invCurrentEl) invCurrentEl.value = "";
   }
 
+  function parseAssignedIds(val){
+    const out = [];
+    if(val && typeof val === "object" && !Array.isArray(val)){
+      if(typeof val.sheetId === "string" && val.sheetId.trim()) out.push(val.sheetId.trim());
+      const m = val.sheetIds;
+      if(m && typeof m === "object" && !Array.isArray(m)){
+        for(const [k, v] of Object.entries(m)){
+          if(v === true || v === 1 || v === "true") out.push(k);
+        }
+      }
+    }
+    // unique, keep order
+    const uniq = [];
+    const seen = new Set();
+    for(const id of out){
+      if(!id) continue;
+      if(seen.has(id)) continue;
+      seen.add(id);
+      uniq.push(id);
+    }
+    return uniq;
+  }
+
+  async function ensureSheetName(id){
+    if(sheetNameCache.has(id)) return sheetNameCache.get(id);
+    try{
+      const snap = await get(ref(db, `rooms/${roomId}/sheets/${id}/name`));
+      const name = snap.exists() ? String(snap.val() || "").trim() : "";
+      sheetNameCache.set(id, name || id);
+    }catch(_){
+      sheetNameCache.set(id, id);
+    }
+    return sheetNameCache.get(id);
+  }
+
+  function renderTabs(){
+    if(!sheetTabsEl) return;
+    if(assignedSheetIds.length <= 1){
+      sheetTabsEl.classList.add("hidden");
+      sheetTabsEl.innerHTML = "";
+      return;
+    }
+    sheetTabsEl.classList.remove("hidden");
+    sheetTabsEl.innerHTML = "";
+    assignedSheetIds.forEach((id) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tab" + (id === activeSheetId ? " active" : "");
+      btn.textContent = sheetNameCache.get(id) || id;
+      btn.addEventListener("click", ()=> setActiveSheet(id));
+      sheetTabsEl.appendChild(btn);
+    });
+  }
+
+  function refreshTabLabels(){
+    if(!sheetTabsEl) return;
+    const tabs = Array.from(sheetTabsEl.querySelectorAll("button.tab"));
+    tabs.forEach((btn, idx) => {
+      const id = assignedSheetIds[idx];
+      if(!id) return;
+      btn.textContent = sheetNameCache.get(id) || id;
+    });
+  }
+
+  async function hydrateTabLabels(){
+    if(assignedSheetIds.length <= 1) return;
+    await Promise.all(assignedSheetIds.map((id)=> ensureSheetName(id)));
+    refreshTabLabels();
+  }
+
+  function stopSubs(){
+    if(sheetUnsub){ try{ sheetUnsub(); }catch(_){} sheetUnsub = null; }
+    if(notesUnsub){ try{ notesUnsub(); }catch(_){} notesUnsub = null; }
+    notesLocalEditing = false;
+  }
 
   function computeDerived(attrs){
     const FOR = asNum(attrs?.FOR, 0);
@@ -1300,13 +1441,12 @@ function initPlayer(){
     const defBase = 6 + DEX;
     const invLimit = (FOR + VIG) * 4;
 
-    // Correção do cálculo de RES (conforme mesa): braços e pernas usam um único valor (não separar no HP).
     const resHead = (VIG + 3) * 3 + 6;
     const resTorso = (VIG + FOR + 3) * 3 + 6;
-    const resLimbs = (VIG + 3) * 2 + 6;
-    const hpTotal = (resHead + resTorso + resLimbs) * 2;
+    const resLimb = (VIG + 3) * 2 + 6;
+    const hpTotal = (resHead + resTorso + resLimb) * 2;
 
-    return { intentions, move, defBase, invLimit, resHead, resTorso, resLimbs, hpTotal };
+    return { intentions, move, defBase, invLimit, resHead, resTorso, resLimb, hpTotal };
   }
 
   function renderSheet(){
@@ -1328,28 +1468,19 @@ function initPlayer(){
     if(derivedSpans.invLimit) derivedSpans.invLimit.textContent = String(d.invLimit);
     if(derivedSpans.resHead) derivedSpans.resHead.textContent = String(d.resHead);
     if(derivedSpans.resTorso) derivedSpans.resTorso.textContent = String(d.resTorso);
-    if(derivedSpans.resLimbs) derivedSpans.resLimbs.textContent = String(d.resLimbs);
-        if(derivedSpans.hpTotal) derivedSpans.hpTotal.textContent = String(d.hpTotal);
+    if(derivedSpans.resLimb) derivedSpans.resLimb.textContent = String(d.resLimb);
+    if(derivedSpans.hpTotal) derivedSpans.hpTotal.textContent = String(d.hpTotal);
 
-    // HP atual / Inventário atual (persistidos no sheet)
-    if(hpCurrentEl && !hpLocalEditing) hpCurrentEl.value = String(asInt(sheet?.hpCurrent, d.hpTotal));
-    if(invCurrentEl && !invLocalEditing) invCurrentEl.value = String(asInt(sheet?.invCurrent, 0));
-
-    // inicializa defaults caso não existam (uma vez por ficha)
-    const sheetBasePath = `rooms/${roomId}/sheets/${assignedSheetId}`;
-    if(sheet && assignedSheetId){
-      if(sheet.hpCurrent === undefined || sheet.hpCurrent === null){
-        set(ref(db, sheetBasePath + "/hpCurrent"), d.hpTotal).catch(()=>{});
-      }
-      if(sheet.invCurrent === undefined || sheet.invCurrent === null){
-        set(ref(db, sheetBasePath + "/invCurrent"), 0).catch(()=>{});
-      }
-    }
+    // current values (persistidos no RTDB)
+    const hpCur = asInt(sheet?.hpCurrent, d.hpTotal);
+    const invCur = asInt(sheet?.invCurrent, 0);
+    if(hpCurrentEl && !hpLocalEditing) hpCurrentEl.value = String(hpCur);
+    if(invCurrentEl && !invLocalEditing) invCurrentEl.value = String(invCur);
 
     renderCategory(itemsList, "items", ensureObj(sheet?.items));
     renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
     renderCategory(disadvantagesList, "disadvantages", ensureObj(sheet?.disadvantages));
-    if(sharedNotesEl && !plNotesLocalEditing) sharedNotesEl.value = String(sheet?.sharedNotes || "");
+    if(sharedNotesEl && !notesLocalEditing) sharedNotesEl.value = String(sheet?.sharedNotes || "");
   }
 
   function renderCategory(container, category, obj){
@@ -1426,6 +1557,52 @@ function initPlayer(){
 
         container.appendChild(div);
       });
+  }
+
+  function setActiveSheet(id){
+    if(activeSheetId === id) return;
+
+    selectedPassives.clear();
+    stopSubs();
+
+    activeSheetId = id || null;
+    renderTabs();
+
+    if(!activeSheetId){
+      sheet = null;
+      renderEmpty();
+      return;
+    }
+
+    setStatus("Carregando ficha...", "warn");
+
+    // Shared notes live-sync
+    if(sharedNotesEl){
+      notesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${activeSheetId}/sharedNotes`), (ns)=>{
+        if(notesLocalEditing) return;
+        sharedNotesEl.value = String(ns.val() || "");
+      }, "playerSharedNotes");
+    }
+
+    sheetUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${activeSheetId}`), (s2) => {
+      if(!s2.exists()){
+        sheet = null;
+        renderEmpty();
+        setStatus("Ficha atribuída não existe mais.", "err");
+        return;
+      }
+      sheet = s2.val();
+
+      // atualiza label da aba (best-effort)
+      const nm = String(sheet?.name || "").trim();
+      if(nm){
+        sheetNameCache.set(activeSheetId, nm);
+        refreshTabLabels();
+      }
+
+      renderSheet();
+      setStatus("OK.", "ok");
+    }, "playerSheet");
   }
 
   function mentalBonuses(mental){
@@ -1535,7 +1712,8 @@ function initPlayer(){
     lines.push("");
     lines.push(`total: ${totalFinal}`);
 
-    rollOut.textContent = lines.join("\n");
+    rollOut.textContent = lines.join("
+");
   }
 
   function rollAttribute(attrKey){
@@ -1591,46 +1769,38 @@ function initPlayer(){
     const meta = metaSnap.val();
     roomCodeOut.textContent = meta.code || "?";
 
+    // abas / atribuição (suporta legacy sheetId e novo sheetIds)
     setStatus("Carregando atribuição...", "warn");
     onValueSafe(ref(db, `rooms/${roomId}/assignments/${uid}`), (snap) => {
       const val = snap.val();
-      assignedSheetId = val?.sheetId || null;
 
-      selectedPassives.clear();
-      if(plNotesUnsub){ try{ plNotesUnsub(); }catch(_){} plNotesUnsub = null; }
-      plNotesLocalEditing = false;
-
-      if(!assignedSheetId){
+      assignedSheetIds = parseAssignedIds(val);
+      if(!assignedSheetIds.length){
+        activeSheetId = null;
         sheet = null;
+        stopSubs();
+        renderTabs();
         renderEmpty();
         setStatus("Sem ficha atribuída. Peça ao GM para atribuir.", "warn");
         return;
       }
 
-      setStatus("Carregando ficha...", "warn");
-      // Shared notes live-sync
-      if(sharedNotesEl){
-        plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/sharedNotes`), (ns)=>{
-          if(plNotesLocalEditing) return;
-          sharedNotesEl.value = String(ns.val() || "");
-        }, "playerSharedNotes");
-      }
-      onValueSafe(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}`), (s2) => {
-        if(!s2.exists()){
-          sheet = null;
-          renderEmpty();
-          setStatus("Ficha atribuída não existe mais.", "err");
-          return;
-        }
-        sheet = s2.val();
-        renderSheet();
-        setStatus("OK.", "ok");
+      // preferir primarySheetId quando existir
+      const preferred = (val && typeof val === "object" && typeof val.primarySheetId === "string") ? val.primarySheetId : null;
+
+      let next = activeSheetId;
+      if(preferred && assignedSheetIds.includes(preferred)) next = preferred;
+      if(!next || !assignedSheetIds.includes(next)) next = assignedSheetIds[0];
+
+      renderTabs();
+      hydrateTabLabels();
+
+      setActiveSheet(next);
     }, "assignment");
-    }, "sheet");
 
     $$(".btn.attr").forEach(btn => btn.addEventListener("click", () => rollAttribute(btn.dataset.attr)));
 
-$$(".btn.die").forEach(btn => {
+    $$(".btn.die").forEach(btn => {
       btn.addEventListener("click", () => {
         const n = Number(btn.dataset.die);
         if(!Number.isFinite(n) || n <= 1) return;
@@ -1641,9 +1811,9 @@ $$(".btn.die").forEach(btn => {
 
     if(sharedNotesEl){
       const saveNotes = debounce(async ()=>{
-        if(!assignedSheetId) return;
+        if(!activeSheetId) return;
         try{
-          await set(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/sharedNotes`), String(sharedNotesEl.value || ""));
+          await set(ref(db, `rooms/${roomId}/sheets/${activeSheetId}/sharedNotes`), String(sharedNotesEl.value || ""));
           setStatus("Anotações salvas.", "ok");
         }catch(e){
           console.error(e);
@@ -1652,33 +1822,47 @@ $$(".btn.die").forEach(btn => {
       }, 500);
 
       sharedNotesEl.addEventListener("input", ()=>{
-        plNotesLocalEditing = true;
+        notesLocalEditing = true;
         saveNotes();
       });
-      sharedNotesEl.addEventListener("blur", ()=>{ plNotesLocalEditing = false; });
+      sharedNotesEl.addEventListener("blur", ()=>{ notesLocalEditing = false; });
     }
 
-    // HP atual
     if(hpCurrentEl){
-      const hpRef = ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/hpCurrent`);
       const saveHp = debounce(async ()=>{
-        if(!assignedSheetId) return;
-        const v = asInt(hpCurrentEl.value, 0);
-        try{ await set(hpRef, Math.max(0, v)); }catch(e){ console.error(e); }
+        if(!activeSheetId) return;
+        try{
+          const v = asInt(hpCurrentEl.value, 0);
+          await set(ref(db, `rooms/${roomId}/sheets/${activeSheetId}/hpCurrent`), v);
+        }catch(e){
+          console.error(e);
+          setStatus(`Erro ao salvar HP atual: ${e?.message || e}`, "err");
+        }
       }, 350);
-      hpCurrentEl.addEventListener("input", ()=>{ hpLocalEditing = true; saveHp(); });
+
+      hpCurrentEl.addEventListener("input", ()=>{
+        hpLocalEditing = true;
+        saveHp();
+      });
       hpCurrentEl.addEventListener("blur", ()=>{ hpLocalEditing = false; });
     }
 
-    // Inventário atual
     if(invCurrentEl){
-      const invRef = ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/invCurrent`);
       const saveInv = debounce(async ()=>{
-        if(!assignedSheetId) return;
-        const v = asInt(invCurrentEl.value, 0);
-        try{ await set(invRef, Math.max(0, v)); }catch(e){ console.error(e); }
+        if(!activeSheetId) return;
+        try{
+          const v = asInt(invCurrentEl.value, 0);
+          await set(ref(db, `rooms/${roomId}/sheets/${activeSheetId}/invCurrent`), v);
+        }catch(e){
+          console.error(e);
+          setStatus(`Erro ao salvar Inventário atual: ${e?.message || e}`, "err");
+        }
       }, 350);
-      invCurrentEl.addEventListener("input", ()=>{ invLocalEditing = true; saveInv(); });
+
+      invCurrentEl.addEventListener("input", ()=>{
+        invLocalEditing = true;
+        saveInv();
+      });
       invCurrentEl.addEventListener("blur", ()=>{ invLocalEditing = false; });
     }
   })().catch((e)=>{
@@ -1686,3 +1870,4 @@ $$(".btn.die").forEach(btn => {
     setStatus(`Erro: ${e?.message || e}`, "err");
   });
 }
+

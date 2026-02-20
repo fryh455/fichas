@@ -2,18 +2,21 @@
   "rules": {
     ".read": false,
     ".write": false,
+
     "roomsByCode": {
       ".read": true,
       "$code": {
         ".write": "auth != null && !data.exists() && newData.isString() && newData.val().length > 0 && newData.val().length < 80"
       }
     },
+
     "rooms": {
       "$roomId": {
         "meta": {
           ".read": "auth != null",
           ".write": "auth != null && ( (!data.exists() && newData.child('gmUid').val() == auth.uid) || (data.exists() && data.child('gmUid').val() == auth.uid) || (root.child('rooms/'+$roomId+'/secrets/gmKeyHash').exists() && root.child('rooms/'+$roomId+'/gmClaims/'+auth.uid+'/hash').exists() && root.child('rooms/'+$roomId+'/gmClaims/'+auth.uid+'/hash').val() == root.child('rooms/'+$roomId+'/secrets/gmKeyHash').val()) )"
         },
+
         "secrets": {
           ".read": false,
           ".write": "auth != null && auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val()",
@@ -21,6 +24,7 @@
             ".validate": "newData.isString() && newData.val().length == 64"
           }
         },
+
         "gmClaims": {
           ".read": false,
           "$uid": {
@@ -28,32 +32,40 @@
             ".write": "auth != null && auth.uid == $uid && newData.child('hash').isString() && newData.child('hash').val().length == 64 && root.child('rooms/'+$roomId+'/secrets/gmKeyHash').exists() && newData.child('hash').val() == root.child('rooms/'+$roomId+'/secrets/gmKeyHash').val()"
           }
         },
+
         "members": {
-          ".read": "auth != null",
           "$uid": {
+            ".read": "auth != null && (auth.uid == $uid || auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val())",
             ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || (auth.uid == $uid && !data.exists()))"
           }
         },
+
         "assignments": {
           "$uid": {
             ".read": "auth != null && (auth.uid == $uid || auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val())",
             ".write": "auth != null && auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val()"
           }
         },
+
         "sheets": {
           "$sheetId": {
-            ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId)",
+            ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists())",
             ".write": "auth != null && auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val()",
+
             "sharedNotes": {
-              ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId)",
-              ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId)"
+              ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists())",
+              ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists())"
             },
+
             "hpCurrent": {
-              ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId)",
+              ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists())",
+              ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists())",
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999999"
             },
+
             "invCurrent": {
-              ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId)",
+              ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists())",
+              ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists())",
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999999"
             }
           }
