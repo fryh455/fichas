@@ -280,7 +280,7 @@ function initGM(){
   });
 
   const roomCodeOut = $("#roomCodeOut");
-  initTabs("#sheetTabs", "body[data-page=player] .tabPanel");
+  initTabs("#sheetTabs", "body[data-page=gm] .tabPanel");
   const membersList = $("#membersList");
   const sheetsList = $("#sheetsList");
   const gmRollsList = $("#gmRollsList");
@@ -602,8 +602,6 @@ function initGM(){
     });
     sharedNotesEl.addEventListener("blur", ()=>{ gmNotesLocalEditing = false; });
   }
-
-  if(avatarFileEl){
     avatarFileEl.addEventListener("change", async ()=>{
       const f = avatarFileEl.files?.[0];
       if(!f) return;
@@ -612,7 +610,6 @@ function initGM(){
         const dataUrl = await fileToDataUrl(f);
         const resized = await resizeImageDataUrl(dataUrl, 256, 0.82);
         currentAvatarDataUrl = resized;
-        if(avatarPreviewEl) avatarPreviewEl.src = currentAvatarDataUrl;
         setStatus("Imagem pronta. Salve a ficha para persistir.", "ok");
       }catch(e){
         console.error(e);
@@ -622,9 +619,6 @@ function initGM(){
   }
   if(btnClearAvatar){
     btnClearAvatar.addEventListener("click", ()=>{
-      currentAvatarDataUrl = "";
-      if(avatarPreviewEl) avatarPreviewEl.src = "";
-      if(avatarFileEl) avatarFileEl.value = "";
       setStatus("Imagem removida do draft. Salve a ficha para persistir.", "ok");
     });
   }
@@ -796,10 +790,6 @@ function initGM(){
     attrVIG.value = 0;
     mentalEl.value = 0;
     if(sharedNotesEl) sharedNotesEl.value = "";
-    if(avatarPreviewEl) avatarPreviewEl.src = "";
-    currentAvatarDataUrl = "";
-    if(avatarPreviewEl) avatarPreviewEl.src = "";
-    if(avatarFileEl) avatarFileEl.value = "";
     if(gmNotesUnsub){ try{ gmNotesUnsub(); }catch(_){} gmNotesUnsub = null; }
     $("#sheetFormTitle") && ($("#sheetFormTitle").textContent = "Criar");
     currentSheetId = null;
@@ -862,7 +852,6 @@ function initGM(){
     if(sharedNotesEl){
       sharedNotesEl.value = String(s?.sharedNotes || "");
       currentAvatarDataUrl = String(s?.profileImage || "");
-      if(avatarPreviewEl) avatarPreviewEl.src = currentAvatarDataUrl;
       gmNotesLocalEditing = false;
       if(gmNotesUnsub) { try{ gmNotesUnsub(); }catch(_){} }
       gmNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${id}/sharedNotes`), (ns)=>{
@@ -1446,9 +1435,6 @@ function initPlayer(){
     if(rollOut) rollOut.textContent = "";
     if(sharedNotesEl) sharedNotesEl.value = "";
     if(avatarViewEl) avatarViewEl.src = "";
-    currentAvatarDataUrl = "";
-    if(avatarPreviewEl) avatarPreviewEl.src = "";
-    if(avatarFileEl) avatarFileEl.value = "";
   }
 
   function renderSheet(){
