@@ -37,30 +37,3 @@ textarea{ resize:vertical; }
 .pre{ white-space:pre-wrap; word-break:break-word; background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:10px; min-height:36px; }
 .toggle{ display:flex; align-items:center; gap:8px; font-size:13px; opacity:.95; }
 .toggle input{ width:auto; }
-
-
-/* Chrome-like character tabs */
-.chromeTabs{ display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; }
-.chromeTab{
-  appearance:none;
-  border:1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
-  color: inherit;
-  padding: 8px 12px;
-  border-radius: 14px 14px 6px 6px;
-  cursor:pointer;
-  font-weight: 650;
-  opacity: 0.9;
-}
-.chromeTab.active{
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(255,255,255,0.22);
-  opacity: 1;
-}
-
-
-/* STRICT: only active panel visible */
-body[data-page="gm"] .tabPanel{ display:none !important; }
-body[data-page="gm"] .tabPanel.active{ display:block !important; }
-body[data-page="player"] .tabPanel{ display:none !important; }
-body[data-page="player"] .tabPanel.active{ display:block !important; }
