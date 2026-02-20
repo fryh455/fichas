@@ -484,7 +484,7 @@ function initGM(){
         div.innerHTML = `
           <div class="meta">
             <div class="title">${escapeHtml(m?.displayName || "(sem nome)")}</div>
-            <div class="sub">${escapeHtml(linkifyRole(m?.role))} • <code>${uid}</code></div>
+            <div class="sub">${escapeHtml(linkifyRole(m?.role))}</div>
           </div>
         `;
         membersList.appendChild(div);
@@ -537,7 +537,7 @@ function initGM(){
       for(const p of players){
         const opt = document.createElement("option");
         opt.value = p.uid;
-        opt.textContent = `${p.name} (${p.uid.slice(0,6)}…)`;
+        opt.textContent = `${p.name}`;
         assignPlayer.appendChild(opt);
       }
     }
@@ -1026,26 +1026,28 @@ function initPlayer(){
   const selectedPassives = new Map();
 
   function renderEmpty(){
-    charName.textContent = "(sem ficha)";
-    mentalOut.textContent = "0";
-    for(const k of Object.keys(attrSpans)) attrSpans[k].textContent = "0";
-    itemsList.innerHTML = "";
-    advantagesList.innerHTML = "";
-    disadvantagesList.innerHTML = "";
-    rollOut.textContent = "";
+    if(charName) charName.textContent = "(sem ficha)";
+    if(mentalOut) mentalOut.textContent = "0";
+    for(const k of Object.keys(attrSpans)){
+      if(attrSpans[k]) attrSpans[k].textContent = "0";
+    }
+    if(itemsList) itemsList.innerHTML = "";
+    if(advantagesList) advantagesList.innerHTML = "";
+    if(disadvantagesList) disadvantagesList.innerHTML = "";
+    if(rollOut) rollOut.textContent = "";
   }
 
   function renderSheet(){
     const name = sheet?.name || "(sem nome)";
     const m = asInt(sheet?.mental, 0);
     const attrs = sheet?.attributes || {};
-    charName.textContent = name;
-    mentalOut.textContent = String(m);
+    if(charName) charName.textContent = name;
+    if(mentalOut) mentalOut.textContent = String(m);
 
-    attrSpans.QI.textContent = String(asNum(attrs.QI, 0));
-    attrSpans.FOR.textContent = String(asNum(attrs.FOR, 0));
-    attrSpans.DEX.textContent = String(asNum(attrs.DEX, 0));
-    attrSpans.VIG.textContent = String(asNum(attrs.VIG, 0));
+    if(attrSpans.QI) attrSpans.QI.textContent = String(asNum(attrs.QI, 0));
+    if(attrSpans.FOR) attrSpans.FOR.textContent = String(asNum(attrs.FOR, 0));
+    if(attrSpans.DEX) attrSpans.DEX.textContent = String(asNum(attrs.DEX, 0));
+    if(attrSpans.VIG) attrSpans.VIG.textContent = String(asNum(attrs.VIG, 0));
 
     renderCategory(itemsList, "items", ensureObj(sheet?.items));
     renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
@@ -1053,6 +1055,7 @@ function initPlayer(){
   }
 
   function renderCategory(container, category, obj){
+    if(!container) return;
     container.innerHTML = "";
     const entries = Object.entries(obj || {});
     if(entries.length === 0){
@@ -1231,7 +1234,13 @@ function initPlayer(){
     setStatus("Autenticando...", "warn");
     const user = await ensureAnonAuth();
     uid = user.uid;
-    uidOut.textContent = uid;
+    uidOut.textContent = "(carregando...)";
+
+    // Mostrar nome no lugar do UID (UID real continua sendo o auth.uid)
+    onValue(ref(db, `rooms/${roomId}/members/${uid}`), (ms) => {
+      const m = ms.val();
+      uidOut.textContent = m?.displayName || uid;
+    });
 
     setStatus("Carregando meta...", "warn");
     const metaSnap = await get(ref(db, `rooms/${roomId}/meta`));
