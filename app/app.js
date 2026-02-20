@@ -1449,3 +1449,29 @@ $$(".btn.die").forEach(btn => {
     setStatus(`Erro: ${e?.message || e}`, "err");
   });
 }
+  function renderMySheetsList(){
+    if(!mySheetsListEl) return;
+    mySheetsListEl.innerHTML = "";
+    if(!selectedSheetIds || selectedSheetIds.length === 0){
+      mySheetsListEl.innerHTML = '<div class="muted">(nenhuma ficha atribuída)</div>';
+      return;
+    }
+    selectedSheetIds.forEach((sid)=>{
+      const s = sheetsCache[sid];
+      const name = s?.name || sid;
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `<div class="meta"><div class="title">${escapeHtml(name)}</div><div class="sub"><code>${escapeHtml(sid)}</code></div></div><div class="row" style="margin:0"><button class="btn small primary">Abrir</button></div>`;
+      div.querySelector("button")?.addEventListener("click", ()=>{
+        selectSheet(sid);
+        // switch to personagem tab
+        const bar = document.querySelector("#playerMainTabs");
+        bar?.querySelectorAll(".tabBtn").forEach(b=> b.classList.remove("active"));
+        bar?.querySelector('[data-tab="pl_char"]')?.classList.add("active");
+        document.querySelectorAll('body[data-page=player] .tabPanel').forEach(p=> p.classList.toggle("active", p.dataset.panel === "pl_char"));
+      });
+      mySheetsListEl.appendChild(div);
+    });
+  }
+
+
