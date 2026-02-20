@@ -809,6 +809,11 @@ function initGM(){
 
     // Shared notes live-sync
     if(sharedNotesEl){
+      if(hpUnsub){ try{ hpUnsub(); }catch(_){} hpUnsub = null; }
+      hpUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/hpCurrent`), (hs)=>{
+        const v = hs.val();
+        if(hpCurrentInEl) hpCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
+      }, "hpCurrent");
       sharedNotesEl.value = String(s?.sharedNotes || "");
       currentAvatarDataUrl = String(s?.profileImage || "");
       if(avatarPreviewEl) avatarPreviewEl.src = currentAvatarDataUrl;
@@ -1227,6 +1232,7 @@ function initPlayer(){
   let selectedSheetId = null;
   let sheet = null;
   let plNotesUnsub = null;
+  let hpUnsub = null;
   let plNotesLocalEditing = false;
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
@@ -1243,6 +1249,11 @@ function initPlayer(){
 
     // Shared notes live-sync
     if(sharedNotesEl){
+      if(hpUnsub){ try{ hpUnsub(); }catch(_){} hpUnsub = null; }
+      hpUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/hpCurrent`), (hs)=>{
+        const v = hs.val();
+        if(hpCurrentInEl) hpCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
+      }, "hpCurrent");
       if(plNotesUnsub){ try{ plNotesUnsub(); }catch(_){} plNotesUnsub = null; }
       plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/sharedNotes`), (ns)=>{
         if(plNotesLocalEditing) return;
