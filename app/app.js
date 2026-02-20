@@ -1,3 +1,17 @@
+
+function initMiniTabs(barSel, panelSel){
+  const bar = document.querySelector(barSel);
+  if(!bar) return;
+  const btns = Array.from(bar.querySelectorAll("[data-mini]"));
+  const panels = Array.from(document.querySelectorAll(panelSel));
+  function activate(tab){
+    btns.forEach(b=> b.classList.toggle("active", b.dataset.mini === tab));
+    panels.forEach(p=> p.classList.toggle("active", p.dataset.miniPanel === tab));
+  }
+  btns.forEach(b=> b.addEventListener("click", ()=> activate(b.dataset.mini)));
+  const first = btns.find(b=> b.classList.contains("active")) || btns[0];
+  if(first) activate(first.dataset.mini);
+}
 import {
   auth, db,
   setPersistence, browserLocalPersistence,

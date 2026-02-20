@@ -18,7 +18,19 @@
 
     <div id="status" class="status"></div>
 
-    <section class="grid2">
+    <div class="tabsBar" id="gmMainTabs">
+      <button class="tabBtn active" data-tab="gm_sheets">Fichas</button>
+      <button class="tabBtn" data-tab="gm_players">Players</button>
+      <button class="tabBtn" data-tab="gm_editor">Criar fichas</button>
+      <button class="tabBtn" data-tab="gm_import">Import massivo de fichas</button>
+      <button class="tabBtn" data-tab="gm_notes">Anotações</button>
+      <button class="tabBtn" data-tab="gm_assign">Atribuir ficha</button>
+      <div class="spacer"></div>
+      <button class="tabBtn" data-tab="gm_rolls">Rolagens</button>
+    </div>
+
+
+    <div class="tabPanel active" data-panel="gm_sheets"><section class="grid2">
       <div class="card">
         <h2>Membros</h2>
         <div id="membersList" class="list"></div>
@@ -31,7 +43,7 @@
         </div>
         <div id="sheetsList" class="list"></div>
       </div>
-    </section>
+    </section></div>
 
     <section class="grid2">
       <div class="card">
@@ -97,6 +109,7 @@
 
         <div class="row">
           <button class="btn primary" type="submit">Salvar ficha</button>
+          <button id="btnCancelSheet" class="btn ghost" type="button">Cancelar</button>
           <button id="btnDeleteSheet" class="btn danger" type="button">Deletar ficha</button>
         </div>
       </form>
