@@ -1754,8 +1754,7 @@ function initPlayer(){
     lines.push("");
     lines.push(`total: ${totalFinal}`);
 
-    rollOut.textContent = lines.join("
-");
+    rollOut.textContent = lines.join("\n");
   }
 
   function rollAttribute(attrKey){
