@@ -430,7 +430,7 @@ function initGM(){
     const out = {};
     out.name = String(e?.name || "").trim().slice(0,80);
     out.type = (e?.type === "ATIVA") ? "ATIVA" : "PASSIVA";
-    out.atributoBase = (["QI","FOR","DEX","VIG"].includes(e?.atributoBase)) ? e.atributoBase : null;
+    out.atributoBase = (["QI","FOR","DEX","VIG","INTENCOES","DEF","MOV","INV"].includes(e?.atributoBase)) ? e.atributoBase : null;
 
     const mm = e?.modMode;
     out.modMode = (mm === "SOMA" || mm === "MULT" || mm === "NONE") ? mm : "NONE";
@@ -1361,6 +1361,13 @@ function initPlayer(){
     hpTotal: $("#hpTotal"),
   };
 
+  const derivedModSpans = {
+    intentions: $("#statIntentionsMods"),
+    move: $("#statMoveMods"),
+    defBase: $("#statDefMods"),
+    invLimit: $("#statInvMods"),
+  };
+
   let uid = null;
 
   let assignedSheetIds = [];
@@ -1491,6 +1498,31 @@ function initPlayer(){
     return { intentions, move, defBase, invLimit, resHead, resTorso, resLimb, hpTotal };
   }
 
+  function formatInlineMods(appliedSoma, appliedMult){
+    const parts = [];
+    for(const a of (appliedSoma || [])){
+      const v = Number(a?.value) || 0;
+      if(v === 0) continue;
+      parts.push(`(${v >= 0 ? "+" : ""}${v}: ${a?.name || "?"})`);
+    }
+    for(const a of (appliedMult || [])){
+      const v = Number(a?.value) || 0;
+      if(v === 0) continue;
+      parts.push(`(${v >= 0 ? "+" : ""}${v}×: ${a?.name || "?"})`);
+    }
+    return parts.join(" ");
+  }
+
+  function applyPassiveModsToBase(baseValue, key){
+    const pass = getSelectedPassiveMods(key);
+    const soma = Number(pass?.soma) || 0;
+    const mult = Number(pass?.mult) || 0;
+    const subtotal = (Number(baseValue) || 0) + soma;
+    const hasMult = (mult !== 0);
+    const total = hasMult ? Math.floor(subtotal * (1 + mult)) : subtotal;
+    return { total, pass };
+  }
+
   function renderSheet(){
     const name = sheet?.name || "(sem nome)";
     const m = asInt(sheet?.mental, 0);
@@ -1504,10 +1536,23 @@ function initPlayer(){
     if(attrSpans.VIG) attrSpans.VIG.textContent = String(asNum(attrs.VIG, 0));
 
     const d = computeDerived(attrs);
-    if(derivedSpans.intentions) derivedSpans.intentions.textContent = String(d.intentions);
-    if(derivedSpans.move) derivedSpans.move.textContent = String(d.move);
-    if(derivedSpans.defBase) derivedSpans.defBase.textContent = String(d.defBase);
-    if(derivedSpans.invLimit) derivedSpans.invLimit.textContent = String(d.invLimit);
+
+    const di = applyPassiveModsToBase(d.intentions, "INTENCOES");
+    if(derivedSpans.intentions) derivedSpans.intentions.textContent = String(di.total);
+    if(derivedModSpans.intentions) derivedModSpans.intentions.textContent = formatInlineMods(di.pass.appliedSoma, di.pass.appliedMult);
+
+    const dm = applyPassiveModsToBase(d.move, "MOV");
+    if(derivedSpans.move) derivedSpans.move.textContent = String(dm.total);
+    if(derivedModSpans.move) derivedModSpans.move.textContent = formatInlineMods(dm.pass.appliedSoma, dm.pass.appliedMult);
+
+    const dd = applyPassiveModsToBase(d.defBase, "DEF");
+    if(derivedSpans.defBase) derivedSpans.defBase.textContent = String(dd.total);
+    if(derivedModSpans.defBase) derivedModSpans.defBase.textContent = formatInlineMods(dd.pass.appliedSoma, dd.pass.appliedMult);
+
+    const dinv = applyPassiveModsToBase(d.invLimit, "INV");
+    if(derivedSpans.invLimit) derivedSpans.invLimit.textContent = String(dinv.total);
+    if(derivedModSpans.invLimit) derivedModSpans.invLimit.textContent = formatInlineMods(dinv.pass.appliedSoma, dinv.pass.appliedMult);
+
     if(derivedSpans.resHead) derivedSpans.resHead.textContent = String(d.resHead);
     if(derivedSpans.resTorso) derivedSpans.resTorso.textContent = String(d.resTorso);
     if(derivedSpans.resLimb) derivedSpans.resLimb.textContent = String(d.resLimb);

@@ -55,5 +55,7 @@ textarea{ resize:vertical; }
 .tab.active{ background:rgba(255,255,255,.10); opacity:1; }
 
 /* compact inline numeric input */
+
+.mods-inline{ font-weight:650; font-size:12px; margin-left:6px; opacity:.8; }
 .inline-num{ width:110px; display:inline-block; margin-left:10px; padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background:rgba(0,0,0,.20); color:#e7eef7; }
 .inline-num:focus{ outline:none; border-color:rgba(0,170,255,.45); }

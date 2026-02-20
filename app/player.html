@@ -32,13 +32,13 @@
       </div>
 
       <div class="grid2 mt12">
-        <div class="stat"><div class="muted">Intenções/turno</div><div class="val" id="statIntentions">0</div><div class="hint muted">1 + floor((VIG+DEX)/2)</div></div>
-        <div class="stat"><div class="muted">Movimento/intenção</div><div class="val"><span id="statMove">0</span> m</div><div class="hint muted">DEX + 2</div></div>
-        <div class="stat"><div class="muted">DEF base</div><div class="val" id="statDef">0</div><div class="hint muted">6 + DEX</div></div>
+        <div class="stat"><div class="muted">Intenções/turno</div><div class="val"><span id="statIntentions">0</span><span id="statIntentionsMods" class="mods-inline"></span></div><div class="hint muted">1 + floor((VIG+DEX)/2)</div></div>
+        <div class="stat"><div class="muted">Movimento/intenção</div><div class="val"><span id="statMove">0</span> m <span id="statMoveMods" class="mods-inline"></span></div><div class="hint muted">DEX + 2</div></div>
+        <div class="stat"><div class="muted">DEF base</div><div class="val"><span id="statDef">0</span><span id="statDefMods" class="mods-inline"></span></div><div class="hint muted">6 + DEX</div></div>
         <div class="stat">
           <div class="muted">Limite inventário</div>
           <div class="val">
-            <span id="statInv">0</span> kg
+            <span id="statInv">0</span> kg <span id="statInvMods" class="mods-inline"></span>
             <input id="invCurrent" class="inline-num" type="number" inputmode="numeric" min="0" step="1" placeholder="Atual" aria-label="Inventário atual" />
           </div>
           <div class="hint muted">(FOR+VIG) * 4 • atual</div>
