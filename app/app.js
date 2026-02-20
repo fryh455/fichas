@@ -231,6 +231,10 @@ function initGM(){
   const roomIdOut = $("#roomIdOut");
   if(roomIdOut) roomIdOut.textContent = roomId;
 
+  // Tabs (GM)
+  initTabsScoped(document.body, "#gmMainTabs", 'body[data-page="gm"] .tabPanel');
+  initMiniTabsScoped(document.body, "#gmEditorTabs", 'body[data-page="gm"] .miniPanel');
+
   $("#btnSignOut")?.addEventListener("click", async () => {
     await signOut(auth);
     location.href = "../index.html";
@@ -1091,6 +1095,10 @@ function initGM(){
  * -------------------------- */
 function initPlayer(){
   const roomId = mustRoomId();
+
+  // Tabs (Player)
+  initTabsScoped(document.body, "#playerBrowserTabs", 'body[data-page="player"] .tabPanel');
+  initMiniTabsScoped(document.body, "#playerMiniTabs", 'body[data-page="player"] .miniPanel');
 
   const roomCodeOut = $("#roomCodeOut");
   const uidOut = $("#uidOut");
