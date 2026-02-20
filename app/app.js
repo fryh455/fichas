@@ -73,18 +73,15 @@ function escapeHtml(s){
 
 function slugify(input){
   let s = String(input || "").trim().toLowerCase();
-  // remove accents
   s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  // spaces -> hyphen
   s = s.replace(/\s+/g, "-");
-  // keep [a-z0-9-]
   s = s.replace(/[^a-z0-9-]/g, "");
-  // collapse hyphens
   s = s.replace(/-+/g, "-");
-  // trim hyphens
   s = s.replace(/^-+/, "").replace(/-+$/, "");
   return s;
 }
+
+function ensureObj(x){ return (x && typeof x === "object" && !Array.isArray(x)) ? x : {}; }
 
 function linkifyRole(role){
   return role === "GM" ? "GM" : "PLAYER";
@@ -138,7 +135,6 @@ function initIndex(){
       updates[`rooms/${roomId}/members/${gmUid}`] = { role: "GM", displayName, joinedAt: ts };
 
       await update(ref(db), updates);
-
       setStatus("Mesa criada. Redirecionando...", "ok");
       location.href = `./app/gm.html?roomId=${encodeURIComponent(roomId)}`;
     }catch(e){
@@ -180,14 +176,14 @@ function initIndex(){
  * -------------------------- */
 function initGM(){
   const roomId = mustRoomId();
-  $("#roomIdOut").textContent = roomId;
+  const roomIdOut = $("#roomIdOut");
+  if(roomIdOut) roomIdOut.textContent = roomId;
 
-  $("#btnSignOut").addEventListener("click", async () => {
+  $("#btnSignOut")?.addEventListener("click", async () => {
     await signOut(auth);
     location.href = "../index.html";
   });
 
-  // UI refs
   const roomCodeOut = $("#roomCodeOut");
   const membersList = $("#membersList");
   const sheetsList = $("#sheetsList");
@@ -236,15 +232,26 @@ function initGM(){
   const btnDeleteEntry = $("#btnDeleteEntry");
   const btnClearEntry = $("#btnClearEntry");
 
-  // In-memory state
+  // optional editor pane controls (if present in gm.html)
+  const sheetEditorPane = $("#sheetEditorPane");
+  const sheetEditorEmpty = $("#sheetEditorEmpty");
+  function openEditor(){
+    sheetEditorPane?.classList.remove("hidden");
+    sheetEditorEmpty?.classList.add("hidden");
+  }
+  function closeEditor(){
+    sheetEditorPane?.classList.add("hidden");
+    sheetEditorEmpty?.classList.remove("hidden");
+  }
+
+  // State
   let userUid = null;
   let meta = null;
   let members = {};
   let sheets = {};
   let currentSheetId = null; // slug
-  let currentSheetDraft = null; // object with items/advantages/disadvantages as objects
+  let currentSheetDraft = null; // {items,advantages,disadvantages}
 
-  // --- helpers for entries ---
   function emptyEntry(){
     return {
       name: "",
@@ -257,8 +264,6 @@ function initGM(){
       notes: null
     };
   }
-
-  function ensureObj(x){ return (x && typeof x === "object" && !Array.isArray(x)) ? x : {}; }
 
   function normalizeEntryPayload(e){
     const out = {};
@@ -285,72 +290,8 @@ function initGM(){
     return out;
   }
 
-  function renderEntryLists(){
-    renderEntryList(itemsCrudList, "items");
-    renderEntryList(advantagesCrudList, "advantages");
-    renderEntryList(disadvantagesCrudList, "disadvantages");
-  }
-
-  function renderEntryList(container, category){
-    container.innerHTML = "";
-    const obj = ensureObj(currentSheetDraft?.[category]);
-    const entries = Object.entries(obj);
-    if(entries.length === 0){
-      container.innerHTML = '<div class="muted">(vazio)</div>';
-      return;
-    }
-    entries
-      .sort((a,b)=> (a[1]?.name || "").localeCompare(b[1]?.name || ""))
-      .forEach(([id, e]) => {
-        const div = document.createElement("div");
-        div.className = "item";
-        const badges = [
-          `<span class="badge">${escapeHtml(e?.type || "")}</span>`,
-          e?.atributoBase ? `<span class="badge">${escapeHtml(e.atributoBase)}</span>` : `<span class="badge">sem atributo</span>`,
-          `<span class="badge">${escapeHtml(e?.modMode || "NONE")}</span>`,
-          (e?.modMode !== "NONE" && e?.modValue !== null && e?.modValue !== undefined) ? `<span class="badge">${escapeHtml(String(e.modValue))}</span>` : ""
-        ].filter(Boolean).join(" ");
-
-        const uses = (e?.usesCurrent !== null && e?.usesCurrent !== undefined) || (e?.usesMax !== null && e?.usesMax !== undefined)
-          ? `<span class="badge">uses ${e?.usesCurrent ?? "?"}/${e?.usesMax ?? "?"}</span>`
-          : "";
-
-        div.innerHTML = `
-          <div class="meta">
-            <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
-            <div class="sub"></div>
-<div class="kv">${badges} ${uses}</div>
-          </div>
-          <div class="row" style="margin:0">
-            <button class="btn small" data-edit="${id}">Editar</button>
-          </div>
-        `;
-        div.querySelector("[data-edit]").addEventListener("click", () => selectEntry(category, id));
-        container.appendChild(div);
-      });
-  }
-
-  function selectEntry(category, id){
-    const obj = ensureObj(currentSheetDraft?.[category]);
-    const e = obj[id];
-    if(!e) return;
-
-    entryCategory.value = category;
-    entryId.value = id;
-    entryName.value = e.name || "";
-    entryType.value = (e.type === "ATIVA") ? "ATIVA" : "PASSIVA";
-    entryAttrBase.value = e.atributoBase || "";
-    entryModMode.value = (e.modMode === "SOMA" || e.modMode === "MULT" || e.modMode === "NONE") ? e.modMode : "NONE";
-    entryModValue.value = (e.modValue === null || e.modValue === undefined) ? "" : String(e.modValue);
-
-    entryUsesCurrent.value = (e.usesCurrent === null || e.usesCurrent === undefined) ? "" : String(e.usesCurrent);
-    entryUsesMax.value = (e.usesMax === null || e.usesMax === undefined) ? "" : String(e.usesMax);
-    entryNotes.value = (e.notes === null || e.notes === undefined) ? "" : String(e.notes);
-
-    setStatus("Registro carregado no editor.", "ok");
-  }
-
   function clearEntryEditor(){
+    if(!entryCategory) return;
     entryCategory.value = "items";
     entryId.value = "";
     entryName.value = "";
@@ -373,24 +314,91 @@ function initGM(){
     throw new Error("Não foi possível gerar sufixo disponível (registro).");
   }
 
+  function renderEntryLists(){
+    renderEntryList(itemsCrudList, "items");
+    renderEntryList(advantagesCrudList, "advantages");
+    renderEntryList(disadvantagesCrudList, "disadvantages");
+  }
+
+  function renderEntryList(container, category){
+    if(!container) return;
+    container.innerHTML = "";
+    const obj = ensureObj(currentSheetDraft?.[category]);
+    const entries = Object.entries(obj);
+    if(entries.length === 0){
+      container.innerHTML = '<div class="muted">(vazio)</div>';
+      return;
+    }
+
+    entries
+      .sort((a,b)=> (a[1]?.name || "").localeCompare(b[1]?.name || ""))
+      .forEach(([id, e]) => {
+        const div = document.createElement("div");
+        div.className = "item";
+
+        const badges = [
+          `<span class="badge">${escapeHtml(e?.type || "")}</span>`,
+          e?.atributoBase ? `<span class="badge">${escapeHtml(e.atributoBase)}</span>` : `<span class="badge">sem atributo</span>`,
+          `<span class="badge">${escapeHtml(e?.modMode || "NONE")}</span>`,
+          (e?.modMode !== "NONE" && e?.modValue !== null && e?.modValue !== undefined) ? `<span class="badge">${escapeHtml(String(e.modValue))}</span>` : ""
+        ].filter(Boolean).join(" ");
+
+        const uses = ((e?.usesCurrent !== null && e?.usesCurrent !== undefined) || (e?.usesMax !== null && e?.usesMax !== undefined))
+          ? `<span class="badge">uses ${e?.usesCurrent ?? "?"}/${e?.usesMax ?? "?"}</span>`
+          : "";
+
+        div.innerHTML = `
+          <div class="meta">
+            <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
+            <div class="kv">${badges} ${uses}</div>
+          </div>
+          <div class="row" style="margin:0">
+            <button class="btn small" data-edit="1">Editar</button>
+          </div>
+        `;
+        div.querySelector("[data-edit]")?.addEventListener("click", () => selectEntry(category, id));
+        container.appendChild(div);
+      });
+  }
+
+  function selectEntry(category, id){
+    const obj = ensureObj(currentSheetDraft?.[category]);
+    const e = obj[id];
+    if(!e) return;
+
+    entryCategory.value = category;
+    entryId.value = id;
+    entryName.value = e.name || "";
+    entryType.value = (e.type === "ATIVA") ? "ATIVA" : "PASSIVA";
+    entryAttrBase.value = e.atributoBase || "";
+    entryModMode.value = (e.modMode === "SOMA" || e.modMode === "MULT" || e.modMode === "NONE") ? e.modMode : "NONE";
+    entryModValue.value = (e.modValue === null || e.modValue === undefined) ? "" : String(e.modValue);
+    entryUsesCurrent.value = (e.usesCurrent === null || e.usesCurrent === undefined) ? "" : String(e.usesCurrent);
+    entryUsesMax.value = (e.usesMax === null || e.usesMax === undefined) ? "" : String(e.usesMax);
+    entryNotes.value = (e.notes === null || e.notes === undefined) ? "" : String(e.notes);
+
+    setStatus("Registro carregado no editor.", "ok");
+  }
+
   function createNewEntry(category){
     if(!currentSheetDraft){
       setStatus("Selecione/crie uma ficha primeiro.", "err");
       return;
     }
-    const id = push(ref(db, `rooms/${roomId}/tmp`)).key; // local id generator
+    // cria temporário; ao salvar, move para slug(name)
+    const tmpId = push(ref(db, `rooms/${roomId}/_tmp`)).key;
     currentSheetDraft[category] = ensureObj(currentSheetDraft[category]);
-    currentSheetDraft[category][id] = emptyEntry();
+    currentSheetDraft[category][tmpId] = emptyEntry();
     renderEntryLists();
-    selectEntry(category, id);
-    setStatus("Novo registro criado (não salvo ainda).", "ok");
+    selectEntry(category, tmpId);
+    setStatus("Novo registro criado (draft). Defina o nome e clique Salvar registro.", "ok");
   }
 
-  btnAddItem.addEventListener("click", ()=> createNewEntry("items"));
-  btnAddAdv.addEventListener("click", ()=> createNewEntry("advantages"));
-  btnAddDis.addEventListener("click", ()=> createNewEntry("disadvantages"));
+  btnAddItem?.addEventListener("click", ()=> createNewEntry("items"));
+  btnAddAdv?.addEventListener("click", ()=> createNewEntry("advantages"));
+  btnAddDis?.addEventListener("click", ()=> createNewEntry("disadvantages"));
 
-  btnSaveEntry.addEventListener("click", ()=>{
+  btnSaveEntry?.addEventListener("click", ()=>{
     const category = entryCategory.value;
     const oldId = entryId.value;
     if(!currentSheetDraft) return setStatus("Sem ficha carregada.", "err");
@@ -406,64 +414,62 @@ function initGM(){
       notes: entryNotes.value
     });
 
-  btnDeleteEntry.addEventListener("click", ()=>{
+    if(!payload.name) return setStatus("Nome do registro é obrigatório.", "err");
+
+    const baseSlug = slugify(payload.name);
+    if(!baseSlug) return setStatus("Nome inválido para gerar ID do registro.", "err");
+
+    currentSheetDraft[category] = ensureObj(currentSheetDraft[category]);
+
+    let finalId = baseSlug;
+    if(!oldId){
+      finalId = nextAvailableEntryId(category, baseSlug);
+    }else if(oldId !== baseSlug){
+      if(currentSheetDraft[category][baseSlug] && baseSlug !== oldId){
+        const overwrite = confirm(`Já existe um registro "${baseSlug}" nesta categoria.\n\nOK = sobrescrever\nCancelar = criar sufixo (-2, -3...)`);
+        finalId = overwrite ? baseSlug : nextAvailableEntryId(category, baseSlug);
+      }else{
+        finalId = baseSlug;
+      }
+    }else{
+      finalId = oldId;
+    }
+
+    currentSheetDraft[category][finalId] = payload;
+    if(oldId && oldId !== finalId) delete currentSheetDraft[category][oldId];
+
+    renderEntryLists();
+    selectEntry(category, finalId);
+    setStatus("Registro salvo no draft (salvar ficha para persistir).", "ok");
+  });
+
+  btnDeleteEntry?.addEventListener("click", ()=>{
     const category = entryCategory.value;
     const id = entryId.value;
     if(!currentSheetDraft) return setStatus("Sem ficha carregada.", "err");
     if(!id) return setStatus("Selecione um registro para deletar.", "err");
+
     const obj = ensureObj(currentSheetDraft[category]);
     if(!obj[id]) return setStatus("Registro não existe.", "warn");
     delete obj[id];
     currentSheetDraft[category] = obj;
+
     renderEntryLists();
     clearEntryEditor();
     setStatus("Registro removido do draft (salvar ficha para persistir).", "ok");
   });
 
-  btnClearEntry.addEventListener("click", ()=>{
+  btnClearEntry?.addEventListener("click", ()=>{
     clearEntryEditor();
     setStatus("Seleção limpa.", "ok");
   });
 
-  // --- Auth gate + verify GM ---
-  (async () => {
-    setStatus("Autenticando...", "warn");
-    const user = await ensureAnonAuth();
-    userUid = user.uid;
-
-    setStatus("Carregando meta...", "warn");
-    const metaSnap = await get(ref(db, `rooms/${roomId}/meta`));
-    if(!metaSnap.exists()){
-      setStatus("Sala inválida (meta não existe).", "err");
-      return;
-    }
-    meta = metaSnap.val();
-    roomCodeOut.textContent = meta.code || "?";
-
-    if(meta.gmUid !== userUid){
-      setStatus("Acesso negado: você não é o GM desta sala.", "err");
-      return;
-    }
-
-    setStatus("OK. Sincronizando...", "ok");
-
-    onValue(ref(db, `rooms/${roomId}/members`), (snap) => {
-      members = snap.val() || {};
-      renderMembers();
-      renderAssignPlayers();
-    });
-
-    onValue(ref(db, `rooms/${roomId}/sheets`), (snap) => {
-      sheets = snap.val() || {};
-      renderSheets();
-      renderAssignSheets();
-    });
-  })().catch((e)=>{
-    console.error(e);
-    setStatus(`Erro: ${e?.message || e}`, "err");
-  });
+  // ---- Sheets ----
+  function numOr0(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
+  function intOr0(v){ const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : 0; }
 
   function renderMembers(){
+    if(!membersList) return;
     membersList.innerHTML = "";
     const entries = Object.entries(members);
     if(entries.length === 0){
@@ -471,11 +477,7 @@ function initGM(){
       return;
     }
     entries
-      .sort((a,b)=>{
-        const ra = a[1]?.role === "GM" ? 0 : 1;
-        const rb = b[1]?.role === "GM" ? 0 : 1;
-        return ra - rb;
-      })
+      .sort((a,b)=> (a[1]?.role === "GM" ? 0 : 1) - (b[1]?.role === "GM" ? 0 : 1))
       .forEach(([uid, m]) => {
         const div = document.createElement("div");
         div.className = "item";
@@ -490,6 +492,7 @@ function initGM(){
   }
 
   function renderSheets(){
+    if(!sheetsList) return;
     sheetsList.innerHTML = "";
     const entries = Object.entries(sheets);
     if(entries.length === 0){
@@ -507,15 +510,16 @@ function initGM(){
             <div class="sub"><code>${id}</code> • QI:${numOr0(s?.attributes?.QI)} FOR:${numOr0(s?.attributes?.FOR)} DEX:${numOr0(s?.attributes?.DEX)} VIG:${numOr0(s?.attributes?.VIG)} • Mental:${intOr0(s?.mental)}</div>
           </div>
           <div class="row" style="margin:0">
-            <button class="btn small" data-edit="${id}">Editar</button>
+            <button class="btn small" data-edit="1">Editar</button>
           </div>
         `;
-        div.querySelector("[data-edit]").addEventListener("click", () => loadSheetIntoForm(id, true));
+        div.querySelector("[data-edit]")?.addEventListener("click", () => loadSheetIntoForm(id, true));
         sheetsList.appendChild(div);
       });
   }
 
   function renderAssignPlayers(){
+    if(!assignPlayer) return;
     const players = Object.entries(members)
       .filter(([,m]) => (m?.role === "PLAYER"))
       .map(([uid,m]) => ({ uid, name: m?.displayName || uid }))
@@ -530,16 +534,17 @@ function initGM(){
       assignPlayer.disabled = true;
     }else{
       assignPlayer.disabled = false;
-      players.forEach(p=>{
+      for(const p of players){
         const opt = document.createElement("option");
         opt.value = p.uid;
         opt.textContent = `${p.name} (${p.uid.slice(0,6)}…)`;
         assignPlayer.appendChild(opt);
-      });
+      }
     }
   }
 
   function renderAssignSheets(){
+    if(!assignSheet) return;
     const list = Object.entries(sheets)
       .map(([id,s]) => ({ id, name: s?.name || id }))
       .sort((a,b)=> a.name.localeCompare(b.name));
@@ -553,12 +558,12 @@ function initGM(){
       assignSheet.disabled = true;
     }else{
       assignSheet.disabled = false;
-      list.forEach(s=>{
+      for(const s of list){
         const opt = document.createElement("option");
         opt.value = s.id;
-        opt.textContent = `${s.name} (${s.id})`;
+        opt.textContent = `${s.name}`;
         assignSheet.appendChild(opt);
-      });
+      }
     }
   }
 
@@ -570,22 +575,19 @@ function initGM(){
     attrDEX.value = 0;
     attrVIG.value = 0;
     mentalEl.value = 0;
-    $("#sheetFormTitle").textContent = "Criar";
+    $("#sheetFormTitle") && ($("#sheetFormTitle").textContent = "Criar");
     currentSheetId = null;
-    currentSheetDraft = {
-      items: {},
-      advantages: {},
-      disadvantages: {}
-    };
+    currentSheetDraft = { items:{}, advantages:{}, disadvantages:{} };
     renderEntryLists();
     clearEntryEditor();
+    closeEditor();
   }
 
   async function nextAvailableSlug(baseSlug){
     for(let i=2;i<200;i++){
-      const candidate = `${baseSlug}-${i}`;
-      const snap = await get(ref(db, `rooms/${roomId}/sheets/${candidate}`));
-      if(!snap.exists()) return candidate;
+      const cand = `${baseSlug}-${i}`;
+      const snap = await get(ref(db, `rooms/${roomId}/sheets/${cand}`));
+      if(!snap.exists()) return cand;
     }
     throw new Error("Não foi possível gerar sufixo disponível.");
   }
@@ -593,21 +595,17 @@ function initGM(){
   async function resolveSlugForCreate(baseSlug){
     const snap = await get(ref(db, `rooms/${roomId}/sheets/${baseSlug}`));
     if(!snap.exists()) return baseSlug;
-
     const overwrite = confirm(`Já existe uma ficha com ID "${baseSlug}".\n\nOK = sobrescrever (MERGE)\nCancelar = criar com sufixo (-2, -3...)`);
     if(overwrite) return baseSlug;
     return await nextAvailableSlug(baseSlug);
   }
 
   async function resolveSlugForImport(baseSlug, mode, existingSet){
-    if(mode === "MERGE"){
-      return baseSlug;
-    }
-    // CREATE_ONLY
+    if(mode === "MERGE") return baseSlug;
     if(!existingSet.has(baseSlug)) return baseSlug;
     for(let i=2;i<200;i++){
-      const candidate = `${baseSlug}-${i}`;
-      if(!existingSet.has(candidate)) return candidate;
+      const cand = `${baseSlug}-${i}`;
+      if(!existingSet.has(cand)) return cand;
     }
     throw new Error("Não foi possível gerar sufixo disponível (import).");
   }
@@ -615,6 +613,8 @@ function initGM(){
   function loadSheetIntoForm(id, userAction){
     const s = sheets[id];
     if(!s) return;
+    openEditor();
+
     currentSheetId = id;
     sheetIdEl.value = id;
     sheetNameEl.value = s.name || "";
@@ -627,10 +627,10 @@ function initGM(){
     currentSheetDraft = {
       items: ensureObj(s?.items),
       advantages: ensureObj(s?.advantages),
-      disadvantages: ensureObj(s?.disadvantages)
+      disadvantages: ensureObj(s?.disadvantages),
     };
 
-    $("#sheetFormTitle").textContent = `Editar: ${s.name || id}`;
+    $("#sheetFormTitle") && ($("#sheetFormTitle").textContent = `Editar: ${s.name || id}`);
     renderEntryLists();
     if(userAction){
       clearEntryEditor();
@@ -638,12 +638,13 @@ function initGM(){
     }
   }
 
-  btnNewSheet.addEventListener("click", () => {
+  btnNewSheet?.addEventListener("click", () => {
     clearForm();
+    openEditor();
     setStatus("Nova ficha (draft).", "ok");
   });
 
-  sheetForm.addEventListener("submit", async (ev) => {
+  sheetForm?.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     try{
       if(!meta || meta.gmUid !== userUid) return setStatus("Sem permissão.", "err");
@@ -657,18 +658,15 @@ function initGM(){
       const oldId = sheetIdEl.value || "";
       let finalId = desiredSlug;
 
-      // If creating new OR renaming to different slug, resolve conflict
       if(!oldId){
         setStatus("Resolvendo slug...", "warn");
         finalId = await resolveSlugForCreate(desiredSlug);
       }else if(oldId !== desiredSlug){
         setStatus("Renomeando (slug mudou)...", "warn");
-        // check if desired exists and isn't old
         const existsSnap = await get(ref(db, `rooms/${roomId}/sheets/${desiredSlug}`));
         if(existsSnap.exists()){
           const overwrite = confirm(`Já existe uma ficha com ID "${desiredSlug}".\n\nOK = sobrescrever (MERGE)\nCancelar = criar com sufixo (-2, -3...)`);
-          if(overwrite) finalId = desiredSlug;
-          else finalId = await nextAvailableSlug(desiredSlug);
+          finalId = overwrite ? desiredSlug : await nextAvailableSlug(desiredSlug);
         }else{
           finalId = desiredSlug;
         }
@@ -677,7 +675,6 @@ function initGM(){
       }
 
       const ts = serverTimestamp();
-
       const payload = {
         name,
         attributes: {
@@ -690,19 +687,16 @@ function initGM(){
         items: ensureObj(currentSheetDraft?.items),
         advantages: ensureObj(currentSheetDraft?.advantages),
         disadvantages: ensureObj(currentSheetDraft?.disadvantages),
-        createdAt: oldId && sheets[oldId]?.createdAt ? (sheets[oldId].createdAt) : ts,
+        createdAt: oldId && sheets[oldId]?.createdAt ? sheets[oldId].createdAt : ts,
         updatedAt: ts,
       };
 
-      // Multi-path update to handle rename (move)
       const updates = {};
       updates[`rooms/${roomId}/sheets/${finalId}`] = payload;
 
-      // If oldId exists and changed, delete old and also update assignments pointing to oldId
       if(oldId && oldId !== finalId){
         updates[`rooms/${roomId}/sheets/${oldId}`] = null;
 
-        // update assignments that reference oldId -> newId (best effort)
         const asSnap = await get(ref(db, `rooms/${roomId}/assignments`));
         const asObj = asSnap.val() || {};
         for(const [uid, a] of Object.entries(asObj)){
@@ -713,23 +707,21 @@ function initGM(){
       }
 
       await update(ref(db), updates);
-
       sheetIdEl.value = finalId;
       currentSheetId = finalId;
-      setStatus(`Ficha salva: ${finalId}`, "ok");
+      setStatus(`Ficha salva: ${payload.name}`, "ok");
     }catch(e){
       console.error(e);
       setStatus(`Erro ao salvar: ${e?.message || e}`, "err");
     }
   });
 
-  btnDeleteSheet.addEventListener("click", async () => {
+  btnDeleteSheet?.addEventListener("click", async () => {
     try{
       const id = sheetIdEl.value;
       if(!id) return setStatus("Nenhuma ficha selecionada.", "warn");
       if(!sheets[id]) return setStatus("Ficha já não existe.", "warn");
 
-      // also clear assignments pointing to it (best effort)
       const asSnap = await get(ref(db, `rooms/${roomId}/assignments`));
       const asObj = asSnap.val() || {};
 
@@ -740,8 +732,8 @@ function initGM(){
           updates[`rooms/${roomId}/assignments/${uid}`] = null;
         }
       }
-      await update(ref(db), updates);
 
+      await update(ref(db), updates);
       clearForm();
       setStatus("Ficha deletada.", "ok");
     }catch(e){
@@ -750,7 +742,7 @@ function initGM(){
     }
   });
 
-  btnAssign.addEventListener("click", async () => {
+  btnAssign?.addEventListener("click", async () => {
     try{
       const playerUid = assignPlayer.value;
       const sheetId = assignSheet.value;
@@ -764,22 +756,20 @@ function initGM(){
     }
   });
 
-  importFile.addEventListener("change", async () => {
+  importFile?.addEventListener("change", async () => {
     const f = importFile.files?.[0];
     if(!f) return;
-    const text = await f.text();
-    importText.value = text;
+    importText.value = await f.text();
     setStatus("Arquivo carregado no textarea.", "ok");
   });
 
-  btnValidateImport.addEventListener("click", async () => {
+  btnValidateImport?.addEventListener("click", async () => {
     const report = await validateImport();
     importReport.textContent = JSON.stringify(report, null, 2);
-    if(report.ok) setStatus("Validação OK.", "ok");
-    else setStatus("Validação com erros.", "err");
+    setStatus(report.ok ? "Validação OK." : "Validação com erros.", report.ok ? "ok" : "err");
   });
 
-  btnDoImport.addEventListener("click", async () => {
+  btnDoImport?.addEventListener("click", async () => {
     try{
       const report = await validateImport();
       importReport.textContent = JSON.stringify(report, null, 2);
@@ -800,22 +790,15 @@ function initGM(){
         const finalSlug = await resolveSlugForImport(baseSlug, mode, existingIds);
         existingIds.add(finalSlug);
 
-        const itemsObj = arrayToObject(entry.items, "items");
-        const advObj = arrayToObject(entry.advantages, "advantages");
-        const disObj = arrayToObject(entry.disadvantages, "disadvantages");
-
-        const prev = existing[finalSlug] || null;
-        const createdAt = prev?.createdAt || ts;
-
         const payload = {
           name: entry.name,
           attributes: entry.attributes,
           mental: entry.mental,
-          items: itemsObj,
-          advantages: advObj,
-          disadvantages: disObj,
-          createdAt,
-          updatedAt: ts
+          items: arrayToObject(entry.items),
+          advantages: arrayToObject(entry.advantages),
+          disadvantages: arrayToObject(entry.disadvantages),
+          createdAt: existing[finalSlug]?.createdAt || ts,
+          updatedAt: ts,
         };
 
         updates[`rooms/${roomId}/sheets/${finalSlug}`] = payload;
@@ -835,15 +818,22 @@ function initGM(){
     }
   });
 
-  function arrayToObject(arr, category){
+  function arrayToObject(arr){
     const a = Array.isArray(arr) ? arr : [];
     const out = {};
     for(const raw of a){
-      const id = push(ref(db, `rooms/${roomId}/sheets/_tmp/${category}`)).key;
       const payload = normalizeEntryPayload(raw);
       if(!payload.name) continue;
-      // For items, ignores uses* if empty
-      out[id] = payload;
+      const id = slugify(payload.name) || push(ref(db, `rooms/${roomId}/_tmpEntry`)).key;
+      // garante unicidade
+      const finalId = out[id] ? (()=>{
+        for(let i=2;i<200;i++){
+          const cand = `${id}-${i}`;
+          if(!out[cand]) return cand;
+        }
+        return push(ref(db, `rooms/${roomId}/_tmpEntry`)).key;
+      })() : id;
+      out[finalId] = payload;
     }
     return out;
   }
@@ -900,7 +890,6 @@ function initGM(){
       const advantages = Array.isArray(s.advantages) ? s.advantages : [];
       const disadvantages = Array.isArray(s.disadvantages) ? s.disadvantages : [];
 
-      // validate entries minimally (types coerced later)
       for(const [cat, arr] of [["items",items],["advantages",advantages],["disadvantages",disadvantages]]){
         if(!Array.isArray(arr)){
           errors.push(`sheets[${idx}].${cat} deve ser array.`);
@@ -957,16 +946,46 @@ function initGM(){
     };
   }
 
-  function numOr0(v){
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }
-  function intOr0(v){
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.trunc(n) : 0;
-  }
+  // ---- realtime ----
+  (async () => {
+    setStatus("Autenticando...", "warn");
+    const user = await ensureAnonAuth();
+    userUid = user.uid;
 
-  // init form empty
+    setStatus("Carregando meta...", "warn");
+    const metaSnap = await get(ref(db, `rooms/${roomId}/meta`));
+    if(!metaSnap.exists()){
+      setStatus("Sala inválida (meta não existe).", "err");
+      return;
+    }
+    meta = metaSnap.val();
+    roomCodeOut && (roomCodeOut.textContent = meta.code || "?");
+
+    if(meta.gmUid !== userUid){
+      setStatus("Acesso negado: você não é o GM desta sala.", "err");
+      return;
+    }
+
+    setStatus("OK. Sincronizando...", "ok");
+
+    onValue(ref(db, `rooms/${roomId}/members`), (snap) => {
+      members = snap.val() || {};
+      renderMembers();
+      renderAssignPlayers();
+    });
+
+    onValue(ref(db, `rooms/${roomId}/sheets`), (snap) => {
+      sheets = snap.val() || {};
+      renderSheets();
+      renderAssignSheets();
+      // não sobrescrever o editor automaticamente
+    });
+  })().catch((e)=>{
+    console.error(e);
+    setStatus(`Erro: ${e?.message || e}`, "err");
+  });
+
+  // init
   clearForm();
 }
 
@@ -978,7 +997,7 @@ function initPlayer(){
 
   const roomCodeOut = $("#roomCodeOut");
   const uidOut = $("#uidOut");
-  $("#btnSignOut").addEventListener("click", async () => {
+  $("#btnSignOut")?.addEventListener("click", async () => {
     await signOut(auth);
     location.href = "../index.html";
   });
@@ -987,7 +1006,6 @@ function initPlayer(){
   const mentalOut = $("#mentalOut");
   const rollOut = $("#rollOut");
   const diceOut = $("#diceOut");
-
 
   const itemsList = $("#itemsList");
   const advantagesList = $("#advantagesList");
@@ -1001,12 +1019,213 @@ function initPlayer(){
   };
 
   let uid = null;
-  let assignedSheetId = null; // slug
+  let assignedSheetId = null;
   let sheet = null;
-  let meta = null;
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
   const selectedPassives = new Map();
+
+  function renderEmpty(){
+    charName.textContent = "(sem ficha)";
+    mentalOut.textContent = "0";
+    for(const k of Object.keys(attrSpans)) attrSpans[k].textContent = "0";
+    itemsList.innerHTML = "";
+    advantagesList.innerHTML = "";
+    disadvantagesList.innerHTML = "";
+    rollOut.textContent = "";
+  }
+
+  function renderSheet(){
+    const name = sheet?.name || "(sem nome)";
+    const m = asInt(sheet?.mental, 0);
+    const attrs = sheet?.attributes || {};
+    charName.textContent = name;
+    mentalOut.textContent = String(m);
+
+    attrSpans.QI.textContent = String(asNum(attrs.QI, 0));
+    attrSpans.FOR.textContent = String(asNum(attrs.FOR, 0));
+    attrSpans.DEX.textContent = String(asNum(attrs.DEX, 0));
+    attrSpans.VIG.textContent = String(asNum(attrs.VIG, 0));
+
+    renderCategory(itemsList, "items", ensureObj(sheet?.items));
+    renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
+    renderCategory(disadvantagesList, "disadvantages", ensureObj(sheet?.disadvantages));
+  }
+
+  function renderCategory(container, category, obj){
+    container.innerHTML = "";
+    const entries = Object.entries(obj || {});
+    if(entries.length === 0){
+      container.innerHTML = '<div class="muted">(vazio)</div>';
+      return;
+    }
+
+    entries
+      .sort((a,b)=> (a[1]?.name || "").localeCompare(b[1]?.name || ""))
+      .forEach(([id, e]) => {
+        const type = (e?.type === "ATIVA") ? "ATIVA" : "PASSIVA";
+        const attrBase = (["QI","FOR","DEX","VIG"].includes(e?.atributoBase)) ? e.atributoBase : null;
+        const modMode = (e?.modMode === "SOMA" || e?.modMode === "MULT" || e?.modMode === "NONE") ? e.modMode : "NONE";
+        const modValue = (modMode === "NONE") ? null : (Number.isFinite(Number(e?.modValue)) ? Number(e.modValue) : 0);
+
+        const uses = ((e?.usesCurrent !== null && e?.usesCurrent !== undefined) || (e?.usesMax !== null && e?.usesMax !== undefined))
+          ? `<span class="badge">uses ${e?.usesCurrent ?? "?"}/${e?.usesMax ?? "?"}</span>`
+          : "";
+
+        const badges = `
+          <span class="badge">${type}</span>
+          ${attrBase ? `<span class="badge">${escapeHtml(attrBase)}</span>` : `<span class="badge">sem atributo</span>`}
+          <span class="badge">${escapeHtml(modMode)}</span>
+          ${modMode !== "NONE" ? `<span class="badge">${escapeHtml(String(modValue))}</span>` : ""}
+          ${uses}
+        `;
+
+        const div = document.createElement("div");
+        div.className = "item";
+
+        if(type === "ATIVA"){
+          div.innerHTML = `
+            <div class="meta">
+              <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
+              <div class="kv">${badges}</div>
+            </div>
+            <div class="row" style="margin:0">
+              <button class="btn small primary" data-roll="1">Rolar</button>
+            </div>
+          `;
+          div.querySelector("[data-roll]")?.addEventListener("click", ()=>{
+            rollActive({ category, id, entry: { name: e?.name || "(sem nome)", atributoBase: attrBase, modMode, modValue } });
+          });
+        }else{
+          const key = `${category}:${id}`;
+          const checked = selectedPassives.has(key);
+          div.innerHTML = `
+            <div class="meta">
+              <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
+              <div class="kv">${badges}</div>
+            </div>
+            <div class="row" style="margin:0">
+              <label class="toggle">
+                <input type="checkbox" ${checked ? "checked" : ""} />
+                <span>Usar como mod</span>
+              </label>
+            </div>
+          `;
+          const cb = div.querySelector("input[type=checkbox]");
+          cb?.addEventListener("change", ()=>{
+            if(cb.checked){
+              selectedPassives.set(key, { category, id, name: e?.name || "(sem nome)", modMode, modValue, atributoBase: attrBase });
+              setStatus("Mod ativo.", "ok");
+            }else{
+              selectedPassives.delete(key);
+              setStatus("Mod removido.", "ok");
+            }
+          });
+        }
+
+        container.appendChild(div);
+      });
+  }
+
+  function mentalBonuses(mental){
+    let diceBonus = 0;
+    if(mental === 4) diceBonus = 5;
+    else if(mental === -8 || mental === -9) diceBonus = -5;
+    // mental 5 / -10 / -11: sem DT aqui (player não calcula DT)
+    return { diceBonus };
+  }
+
+  function getSelectedPassiveMods(){
+    let soma = 0;
+    let mult = 0;
+    for(const p of selectedPassives.values()){
+      if(p.modMode === "SOMA"){
+        const v = Number(p.modValue) || 0;
+        soma += v;
+      }else if(p.modMode === "MULT"){
+        const v = Number(p.modValue) || 0;
+        mult += v;
+      }
+    }
+    return { soma, mult };
+  }
+
+  // Output: somente d12 e modificadores != 0 + total
+  function rollCore({ title, baseAttrValue, activeMod }){
+    if(!sheet){
+      setStatus("Sem ficha carregada.", "err");
+      return;
+    }
+
+    const mental = asInt(sheet.mental, 0);
+    const { diceBonus } = mentalBonuses(mental);
+
+    const d12 = buildDice(12);
+
+    const pass = getSelectedPassiveMods();
+    const somaPass = pass.soma;
+    const multPass = pass.mult;
+
+    let somaAtiva = 0;
+    let multAtiva = 0;
+
+    if(activeMod){
+      if(activeMod.mode === "SOMA") somaAtiva = Number(activeMod.value) || 0;
+      if(activeMod.mode === "MULT") multAtiva = Number(activeMod.value) || 0;
+    }
+
+    const subtotal = d12 + diceBonus + baseAttrValue + somaPass + somaAtiva;
+
+    const multValue = multPass + multAtiva;
+    const hasMult = (multValue !== 0);
+    let totalFinal = hasMult ? Math.floor(subtotal * (1 + multValue)) : subtotal;
+
+    const isCrit = (d12 === 12);
+    if(isCrit) totalFinal = Math.floor(totalFinal * 1.5);
+
+    const lines = [];
+    lines.push(String(title || "Rolagem"));
+    lines.push("");
+    lines.push(`d12: ${d12}`);
+
+    if(diceBonus !== 0) lines.push(`diceBonus: ${diceBonus}`);
+    if(baseAttrValue !== 0) lines.push(`atributo: ${baseAttrValue}`);
+    if(somaPass !== 0) lines.push(`passivas(SOMA): ${somaPass}`);
+    if(somaAtiva !== 0) lines.push(`ativa(SOMA): ${somaAtiva}`);
+    if(hasMult) lines.push(`mult: ${multValue}`);
+    if(isCrit) lines.push(`crítico: SIM`);
+
+    lines.push(`total: ${totalFinal}`);
+    rollOut.textContent = lines.join("\n");
+  }
+
+  function rollAttribute(attrKey){
+    if(!sheet) return;
+    const attrs = sheet.attributes || {};
+    const attrVal = asNum(attrs[attrKey], 0);
+    rollCore({
+      title: `Rolagem: ${attrKey}`,
+      baseAttrValue: attrVal,
+      activeMod: null
+    });
+  }
+
+  function rollActive({ category, id, entry }){
+    const attrs = sheet?.attributes || {};
+    const baseAttrKey = entry.atributoBase || null;
+    const baseAttrValue = baseAttrKey ? asNum(attrs[baseAttrKey], 0) : 0;
+
+    const activeMod = {
+      mode: entry.modMode,
+      value: entry.modMode === "NONE" ? 0 : (Number(entry.modValue) || 0)
+    };
+
+    rollCore({
+      title: `Rolagem: ${entry.name}`,
+      baseAttrValue,
+      activeMod,
+    });
+  }
 
   (async ()=>{
     setStatus("Autenticando...", "warn");
@@ -1020,7 +1239,7 @@ function initPlayer(){
       setStatus("Sala inválida (meta não existe).", "err");
       return;
     }
-    meta = metaSnap.val();
+    const meta = metaSnap.val();
     roomCodeOut.textContent = meta.code || "?";
 
     setStatus("Carregando atribuição...", "warn");
@@ -1061,264 +1280,8 @@ function initPlayer(){
         diceOut.textContent = `d${n} -> ${r}`;
       });
     });
-
   })().catch((e)=>{
     console.error(e);
     setStatus(`Erro: ${e?.message || e}`, "err");
   });
-
-  function ensureObj(x){ return (x && typeof x === "object" && !Array.isArray(x)) ? x : {}; }
-
-  function renderEmpty(){
-    charName.textContent = "(sem ficha)";
-    mentalOut.textContent = "0";
-    for(const k of Object.keys(attrSpans)) attrSpans[k].textContent = "0";
-    itemsList.innerHTML = "";
-    advantagesList.innerHTML = "";
-    disadvantagesList.innerHTML = "";
-    rollOut.textContent = "";
-  }
-
-  function renderSheet(){
-    const name = sheet?.name || "(sem nome)";
-    const m = asInt(sheet?.mental, 0);
-    const attrs = sheet?.attributes || {};
-    charName.textContent = name;
-    mentalOut.textContent = String(m);
-
-    attrSpans.QI.textContent = String(asNum(attrs.QI, 0));
-    attrSpans.FOR.textContent = String(asNum(attrs.FOR, 0));
-    attrSpans.DEX.textContent = String(asNum(attrs.DEX, 0));
-    attrSpans.VIG.textContent = String(asNum(attrs.VIG, 0));
-
-    renderCategory(itemsList, "items", ensureObj(sheet?.items));
-    renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
-    renderCategory(disadvantagesList, "disadvantages", ensureObj(sheet?.disadvantages));
-
-  }
-    for(const [key, p] of selectedPassives.entries()){
-      const div = document.createElement("div");
-      div.className = "item";
-      const mv = (p.modMode === "NONE" || p.modValue === null || p.modValue === undefined) ? "0" : String(p.modValue);
-      div.innerHTML = `
-        <div class="meta">
-          <div class="title">${escapeHtml(p.name)}</div>
-          <div class="sub">${escapeHtml(p.category)} • <code>${escapeHtml(p.id)}</code></div>
-          <div class="kv">
-            <span class="badge">PASSIVA</span>
-            ${p.atributoBase ? `<span class="badge">${escapeHtml(p.atributoBase)}</span>` : `<span class="badge">sem atributo</span>`}
-            <span class="badge">${escapeHtml(p.modMode)}</span>
-            ${p.modMode !== "NONE" ? `<span class="badge">${escapeHtml(mv)}</span>` : ""}
-          </div>
-        </div>
-        <div class="row" style="margin:0">
-          <button class="btn small danger" data-rm="1">Remover</button>
-        </div>
-      `;
-      div.querySelector("[data-rm]").addEventListener("click", ()=>{
-        selectedPassives.delete(key);
-          setStatus("Mod removido.", "ok");
-      });
-      modsActive.appendChild(div);
-    }
-  }
-
-  function renderCategory(container, category, obj){
-    container.innerHTML = "";
-    const entries = Object.entries(obj || {});
-    if(entries.length === 0){
-      container.innerHTML = '<div class="muted">(vazio)</div>';
-      return;
-    }
-
-    entries
-      .sort((a,b)=> (a[1]?.name || "").localeCompare(b[1]?.name || ""))
-      .forEach(([id, e]) => {
-        const type = (e?.type === "ATIVA") ? "ATIVA" : "PASSIVA";
-        const attrBase = (["QI","FOR","DEX","VIG"].includes(e?.atributoBase)) ? e.atributoBase : null;
-        const modMode = (e?.modMode === "SOMA" || e?.modMode === "MULT" || e?.modMode === "NONE") ? e.modMode : "NONE";
-        const modValue = (modMode === "NONE") ? null : (Number.isFinite(Number(e?.modValue)) ? Number(e.modValue) : 0);
-
-        const uses = (e?.usesCurrent !== null && e?.usesCurrent !== undefined) || (e?.usesMax !== null && e?.usesMax !== undefined)
-          ? `<span class="badge">uses ${e?.usesCurrent ?? "?"}/${e?.usesMax ?? "?"}</span>`
-          : "";
-
-        const badges = `
-          <span class="badge">${type}</span>
-          ${attrBase ? `<span class="badge">${escapeHtml(attrBase)}</span>` : `<span class="badge">sem atributo</span>`}
-          <span class="badge">${escapeHtml(modMode)}</span>
-          ${modMode !== "NONE" ? `<span class="badge">${escapeHtml(String(modValue))}</span>` : ""}
-          ${uses}
-        `;
-
-        const div = document.createElement("div");
-        div.className = "item";
-
-        if(type === "ATIVA"){
-          div.innerHTML = `
-            <div class="meta">
-              <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
-              <div class="sub"><code>${escapeHtml(id)}</code></div>
-              <div class="kv">${badges}</div>
-            </div>
-            <div class="row" style="margin:0">
-              <button class="btn small primary" data-roll="1">Rolar</button>
-            </div>
-          `;
-          div.querySelector("[data-roll]").addEventListener("click", ()=>{
-            rollActive({ category, id, entry: { name: e?.name || "(sem nome)", atributoBase: attrBase, modMode, modValue } });
-          });
-        }else{
-          const key = `${category}:${id}`;
-          const checked = selectedPassives.has(key);
-          div.innerHTML = `
-            <div class="meta">
-              <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
-              <div class="sub"><code>${escapeHtml(id)}</code></div>
-              <div class="kv">${badges}</div>
-            </div>
-            <div class="row" style="margin:0">
-              <label class="toggle">
-                <input type="checkbox" ${checked ? "checked" : ""} />
-                <span>Usar como mod</span>
-              </label>
-            </div>
-          `;
-          const cb = div.querySelector("input[type=checkbox]");
-          cb.addEventListener("change", ()=>{
-            if(cb.checked){
-              selectedPassives.set(key, {
-                category,
-                id,
-                name: e?.name || "(sem nome)",
-                modMode,
-                modValue,
-                atributoBase: attrBase
-              });
-              setStatus("Mod ativo.", "ok");
-            }else{
-              selectedPassives.delete(key);
-              setStatus("Mod removido.", "ok");
-            }
-                });
-        }
-
-        container.appendChild(div);
-      });
-  }
-
-  function mentalBonuses(mental){
-    let diceBonus = 0;
-    let dtBonus = 0;
-    if(mental === 4) diceBonus = 5;
-    else if(mental === 5) dtBonus = -3;
-    else if(mental === -8 || mental === -9) diceBonus = -5;
-    else if(mental === -10 || mental === -11){
-      // sem efeito no MVP
-    }
-    return { diceBonus, dtBonus };
-  }
-
-  function getSelectedPassiveMods(){
-    let soma = 0;
-    let mult = 0;
-    const applied = [];
-    for(const p of selectedPassives.values()){
-      if(p.modMode === "SOMA"){
-        const v = Number(p.modValue) || 0;
-        if(v !== 0){
-          soma += v;
-          applied.push({ name: p.name, mode:"SOMA", value:v });
-        }
-      }else if(p.modMode === "MULT"){
-        const v = Number(p.modValue) || 0;
-        if(v !== 0){
-          mult += v;
-          applied.push({ name: p.name, mode:"MULT", value:v });
-        }
-      }
-    }
-    return { soma, mult, applied };
-  }
-
-  function rollCore({ title, baseAttrKey, baseAttrValue, activeMod, activeLabel }){
-    if(!sheet){
-      setStatus("Sem ficha carregada.", "err");
-      return;
-    }
-    const mental = asInt(sheet.mental, 0);
-    const { diceBonus } = mentalBonuses(mental);
-
-    const d12 = buildDice(12);
-
-    const pass = getSelectedPassiveMods();
-    const somaPass = pass.soma;
-    const multPass = pass.mult;
-
-    let somaAtiva = 0;
-    let multAtiva = 0;
-
-    if(activeMod){
-      if(activeMod.mode === "SOMA") somaAtiva = Number(activeMod.value) || 0;
-      if(activeMod.mode === "MULT") multAtiva = Number(activeMod.value) || 0;
-    }
-
-    const subtotal = d12 + diceBonus + baseAttrValue + somaPass + somaAtiva;
-
-    const multValue = multPass + multAtiva;
-    const hasMult = (multValue !== 0);
-    let totalFinal = hasMult ? Math.floor(subtotal * (1 + multValue)) : subtotal;
-
-    const isCrit = (d12 === 12);
-    if(isCrit) totalFinal = Math.floor(totalFinal * 1.5);
-
-    const lines = [];
-    lines.push(`${title}`);
-    lines.push("");
-    lines.push(`d12: ${d12}`);
-
-    if(diceBonus !== 0) lines.push(`diceBonus: ${diceBonus}`);
-    if(baseAttrValue !== 0) lines.push(`atributo: ${baseAttrValue}`);
-    if(somaPass !== 0) lines.push(`passivas(SOMA): ${somaPass}`);
-    if(somaAtiva !== 0) lines.push(`ativa(SOMA): ${somaAtiva}`);
-    if(hasMult) lines.push(`mult: ${multValue}`);
-    if(isCrit) lines.push(`crítico: SIM`);
-
-    lines.push(`total: ${totalFinal}`);
-
-    rollOut.textContent = lines.join("
-");
-  }
-
-  function rollAttribute(attrKey){
-    if(!sheet) return;
-    const attrs = sheet.attributes || {};
-    const attrVal = asNum(attrs[attrKey], 0);
-    rollCore({
-      title: `Rolagem de Atributo: ${attrKey}`,
-      baseAttrKey: attrKey,
-      baseAttrValue: attrVal,
-      activeMod: null,
-      activeLabel: ""
-    });
-  }
-
-  function rollActive({ category, id, entry }){
-    const attrs = sheet?.attributes || {};
-    const baseAttrKey = entry.atributoBase || null;
-    const baseAttrValue = baseAttrKey ? asNum(attrs[baseAttrKey], 0) : 0;
-
-    const activeMod = {
-      mode: entry.modMode,
-      value: entry.modMode === "NONE" ? 0 : (Number(entry.modValue) || 0)
-    };
-
-    rollCore({
-      title: `Rolagem ATIVA: ${entry.name}`,
-      baseAttrKey,
-      baseAttrValue,
-      activeMod,
-      activeLabel: `${category}/${id}`
-    });
-  }
 }
