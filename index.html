@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fichas Online</title>
+  <link rel="stylesheet" href="./app/app.css" />
+</head>
+<body data-page="index">
+  <main class="container">
+    <h1>Fichas Online</h1>
+
+    <div id="status" class="status"></div>
+
+    <div class="card">
+      <label>displayName
+        <input id="displayName" autocomplete="nickname" />
+      </label>
+
+      <label>roomCode
+        <input id="roomCode" autocomplete="off" />
+      </label>
+
+      <div class="row">
+        <button id="btnCreate" class="btn primary">Criar mesa</button>
+        <button id="btnJoin" class="btn">Entrar na mesa</button>
+      </div>
+    </div>
+
+    <p class="muted">Abra via Live Server na raiz.</p>
+  </main>
+
+  <script type="module" src="./app/app.js"></script>
+</body>
+</html>
