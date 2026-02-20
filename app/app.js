@@ -809,16 +809,6 @@ function initGM(){
 
     // Shared notes live-sync
     if(sharedNotesEl){
-      if(hpUnsub){ try{ hpUnsub(); }catch(_){} hpUnsub = null; }
-      if(invUnsub){ try{ invUnsub(); }catch(_){} invUnsub = null; }
-      hpUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/hpCurrent`), (hs)=>{
-        const v = hs.val();
-        if(hpCurrentInEl) hpCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
-      }, "hpCurrent");
-      invUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/invCurrent`), (is)=>{
-        const v = is.val();
-        if(invCurrentInEl) invCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
-      }, "invCurrent");
       sharedNotesEl.value = String(s?.sharedNotes || "");
       currentAvatarDataUrl = String(s?.profileImage || "");
       if(avatarPreviewEl) avatarPreviewEl.src = currentAvatarDataUrl;
@@ -1218,7 +1208,7 @@ function initPlayer(){
   const rollOut = $("#rollOut");
   const diceOut = $("#diceOut");
 
-  // Derived stats + HP/Inventory
+  // Status + HP/Inventário
   const statIntentionsEl = $("#statIntentions");
   const statMoveEl = $("#statMove");
   const statDefEl = $("#statDef");
@@ -1256,8 +1246,6 @@ function initPlayer(){
   let selectedSheetId = null;
   let sheet = null;
   let plNotesUnsub = null;
-  let hpUnsub = null;
-  let invUnsub = null;
   let plNotesLocalEditing = false;
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
@@ -1274,16 +1262,6 @@ function initPlayer(){
 
     // Shared notes live-sync
     if(sharedNotesEl){
-      if(hpUnsub){ try{ hpUnsub(); }catch(_){} hpUnsub = null; }
-      if(invUnsub){ try{ invUnsub(); }catch(_){} invUnsub = null; }
-      hpUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/hpCurrent`), (hs)=>{
-        const v = hs.val();
-        if(hpCurrentInEl) hpCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
-      }, "hpCurrent");
-      invUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/invCurrent`), (is)=>{
-        const v = is.val();
-        if(invCurrentInEl) invCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
-      }, "invCurrent");
       if(plNotesUnsub){ try{ plNotesUnsub(); }catch(_){} plNotesUnsub = null; }
       plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/sharedNotes`), (ns)=>{
         if(plNotesLocalEditing) return;
@@ -1302,6 +1280,24 @@ function initPlayer(){
       renderSheet();
       setStatus("OK.", "ok");
     }, "sheet");
+  }
+
+  function computeDerivedStats(attrs){
+    const FOR = asNum(attrs?.FOR, 0);
+    const DEX = asNum(attrs?.DEX, 0);
+    const VIG = asNum(attrs?.VIG, 0);
+
+    const intentions = 1 + Math.floor((VIG + DEX) / 2);
+    const movePerInt = DEX + 2;
+    const defBase = 6 + DEX;
+    const invMax = (FOR + VIG) * 4;
+
+    const resHead = (VIG + 3) * 4 + 6;
+    const resTorso = (VIG + FOR + 3) * 4 + 6;
+    const resLimb = (VIG + 3) * 3 + 6;
+    const hpTotal = (resHead + resTorso + (resLimb * 4)) * 2;
+
+    return { intentions, movePerInt, defBase, invMax, resHead, resTorso, resArm: resLimb, resLeg: resLimb, hpTotal };
   }
 
   function renderEmpty(){
@@ -1651,7 +1647,40 @@ $$(".btn.die").forEach(btn => {
       });
       sharedNotesEl.addEventListener("blur", ()=>{ plNotesLocalEditing = false; });
     }
-  })().catch((e)=>{
+  
+
+    // HP & Inventário quick edit (salva no RTDB)
+    const clampInt = (x)=>{ const n = Number(x); return Number.isFinite(n) ? Math.trunc(n) : 0; };
+    const clampNum = (x)=>{ const n = Number(x); return Number.isFinite(n) ? n : 0; };
+
+    hpMinusBtn?.addEventListener("click", ()=>{ if(!hpCurrentInEl) return; hpCurrentInEl.value = String(clampInt(hpCurrentInEl.value) - 1); });
+    hpPlusBtn?.addEventListener("click", ()=>{ if(!hpCurrentInEl) return; hpCurrentInEl.value = String(clampInt(hpCurrentInEl.value) + 1); });
+    hpSaveBtn?.addEventListener("click", async ()=>{
+      try{
+        if(!selectedSheetId) return;
+        const v = clampInt(hpCurrentInEl?.value);
+        await set(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/hpCurrent`), v);
+        setStatus("HP atual salvo.", "ok");
+      }catch(e){
+        console.error(e);
+        setStatus(`Erro ao salvar HP: ${e?.message || e}`, "err");
+      }
+    });
+
+    invMinusBtn?.addEventListener("click", ()=>{ if(!invCurrentInEl) return; invCurrentInEl.value = String(clampNum(invCurrentInEl.value) - 0.5); });
+    invPlusBtn?.addEventListener("click", ()=>{ if(!invCurrentInEl) return; invCurrentInEl.value = String(clampNum(invCurrentInEl.value) + 0.5); });
+    invSaveBtn?.addEventListener("click", async ()=>{
+      try{
+        if(!selectedSheetId) return;
+        const v = clampNum(invCurrentInEl?.value);
+        await set(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/invCurrent`), v);
+        setStatus("Inventário atual salvo.", "ok");
+      }catch(e){
+        console.error(e);
+        setStatus(`Erro ao salvar inventário: ${e?.message || e}`, "err");
+      }
+    });
+})().catch((e)=>{
     console.error(e);
     setStatus(`Erro: ${e?.message || e}`, "err");
   });
