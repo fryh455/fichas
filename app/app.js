@@ -705,8 +705,6 @@ function initGM(){
         opt.textContent = `${p.name}`;
         assignPlayer.appendChild(opt);
       }
-    }catch(e){
-      console.warn("roll save failed", e);
     }
   }
 
