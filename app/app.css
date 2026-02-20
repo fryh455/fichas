@@ -226,3 +226,6 @@ input:focus, textarea:focus, select:focus{
   background: rgba(15,17,23,.7);
   border: 1px solid rgba(37,42,54,.9);
 }
+
+
+.hidden{ display:none !important; }

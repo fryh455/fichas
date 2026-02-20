@@ -991,11 +991,9 @@ function initPlayer(){
 
   const charName = $("#charName");
   const mentalOut = $("#mentalOut");
-  const gradeSelect = $("#gradeSelect");
   const rollOut = $("#rollOut");
   const diceOut = $("#diceOut");
 
-  const modsActive = $("#modsActive");
 
   const itemsList = $("#itemsList");
   const advantagesList = $("#advantagesList");
@@ -1007,8 +1005,6 @@ function initPlayer(){
     DEX: $("#aDEX"),
     VIG: $("#aVIG"),
   };
-
-  const DT_BY_GRADE = { G0:6, G1:9, G2:12, G3:15, G4:21, G5:27, G6:33 };
 
   let uid = null;
   let assignedSheetId = null; // slug
@@ -1039,7 +1035,6 @@ function initPlayer(){
       assignedSheetId = val?.sheetId || null;
 
       selectedPassives.clear();
-      renderModsActive();
 
       if(!assignedSheetId){
         sheet = null;
@@ -1106,15 +1101,7 @@ function initPlayer(){
     renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
     renderCategory(disadvantagesList, "disadvantages", ensureObj(sheet?.disadvantages));
 
-    renderModsActive();
   }
-
-  function renderModsActive(){
-    modsActive.innerHTML = "";
-    if(selectedPassives.size === 0){
-      modsActive.innerHTML = '<div class="muted">(nenhum)</div>';
-      return;
-    }
     for(const [key, p] of selectedPassives.entries()){
       const div = document.createElement("div");
       div.className = "item";
@@ -1136,8 +1123,7 @@ function initPlayer(){
       `;
       div.querySelector("[data-rm]").addEventListener("click", ()=>{
         selectedPassives.delete(key);
-        renderModsActive();
-        setStatus("Mod removido.", "ok");
+          setStatus("Mod removido.", "ok");
       });
       modsActive.appendChild(div);
     }
@@ -1220,8 +1206,7 @@ function initPlayer(){
               selectedPassives.delete(key);
               setStatus("Mod removido.", "ok");
             }
-            renderModsActive();
-          });
+                });
         }
 
         container.appendChild(div);
@@ -1262,19 +1247,13 @@ function initPlayer(){
     return { soma, mult, applied };
   }
 
-  function dtFromGrade(){
-    const grade = gradeSelect.value || "G0";
-    return { grade, dt: DT_BY_GRADE[grade] ?? 6 };
-  }
-
   function rollCore({ title, baseAttrKey, baseAttrValue, activeMod, activeLabel }){
     if(!sheet){
       setStatus("Sem ficha carregada.", "err");
       return;
     }
     const mental = asInt(sheet.mental, 0);
-    const { diceBonus, dtBonus } = mentalBonuses(mental);
-    const { grade, dt } = dtFromGrade();
+    const { diceBonus } = mentalBonuses(mental);
 
     const d12 = buildDice(12);
 
@@ -1299,27 +1278,18 @@ function initPlayer(){
     const isCrit = (d12 === 12);
     if(isCrit) totalFinal = Math.floor(totalFinal * 1.5);
 
-    const dtFinal = dt + dtBonus;
-    const success = totalFinal >= dtFinal;
-
     const lines = [];
     lines.push(`${title}`);
-    lines.push(`Grau: ${grade} (DT ${dt})`);
-    lines.push(`Mental: ${mental}`);
     lines.push("");
     lines.push(`d12: ${d12}`);
-    lines.push(`diceBonus (mental): ${diceBonus}`);
-    lines.push(`${baseAttrKey ? "atributo" : "atributo"}: ${baseAttrKey ? baseAttrKey : "(nenhum)"} = ${baseAttrValue}`);
+    if(diceBonus !== 0) lines.push(`diceBonus (mental): ${diceBonus}`);
+    if(baseAttrValue !== 0) lines.push(`atributo: ${baseAttrKey ? baseAttrKey : "(nenhum)"} = ${baseAttrValue}`);
     if(somaPass !== 0) lines.push(`passivas SOMA: ${somaPass}`);
     if(somaAtiva !== 0) lines.push(`ativa SOMA: ${somaAtiva} (${activeLabel})`);
     lines.push(`subtotal: ${subtotal}`);
     if(hasMult) lines.push(`MULT total: ${multValue}  -> floor(subtotal * (1 + mult))`);
     lines.push(`crítico?: ${isCrit ? "SIM (d12=12)" : "NÃO"}`);
     lines.push(`totalFinal: ${totalFinal}`);
-    lines.push("");
-    lines.push(`dtBonus (mental): ${dtBonus}`);
-    lines.push(`DT final: ${dtFinal}`);
-    lines.push(`sucesso?: ${success ? "SIM" : "NÃO"}`);
 
     if(pass.applied.length){
       lines.push("");
@@ -1335,7 +1305,8 @@ function initPlayer(){
       lines.push(`Ativa aplicada: ${activeLabel} (${activeMod.mode} ${sign}${activeMod.value})`);
     }
 
-    rollOut.textContent = lines.join("\n");
+    rollOut.textContent = lines.join("
+");
   }
 
   function rollAttribute(attrKey){
