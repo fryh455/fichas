@@ -39,18 +39,21 @@ textarea{ resize:vertical; }
 .toggle input{ width:auto; }
 
 
-/* Tabs (generic) */
-.tabsBar{ display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.10); margin-bottom:12px; }
-.tabBtn{ appearance:none; border:1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: inherit; padding: 8px 12px; border-radius: 14px 14px 6px 6px; cursor:pointer; font-weight: 650; opacity: 0.9; }
-.tabBtn.active{ background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.22); opacity: 1; }
-.tabPanel{ display:none; }
-.tabPanel.active{ display:block; }
-
-/* Mini tabs */
-.miniTabs{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
-.miniBtn{ appearance:none; border:1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: inherit; padding: 7px 10px; border-radius: 999px; cursor:pointer; font-weight: 650; opacity: 0.85; }
-.miniBtn.active{ background: rgba(255,255,255,0.12); opacity: 1; border-color: rgba(255,255,255,0.22); }
-.miniPanel{ display:none; margin-top:10px; }
-.miniPanel.active{ display:block; }
-
-.tabsBar .spacer{ flex:1 1 auto; }
+/* Chrome-like character tabs */
+.chromeTabs{ display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; }
+.chromeTab{
+  appearance:none;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding: 8px 12px;
+  border-radius: 14px 14px 6px 6px;
+  cursor:pointer;
+  font-weight: 650;
+  opacity: 0.9;
+}
+.chromeTab.active{
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.22);
+  opacity: 1;
+}
