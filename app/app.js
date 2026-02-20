@@ -232,7 +232,7 @@ function initGM(){
   if(roomIdOut) roomIdOut.textContent = roomId;
 
   // Tabs (GM)
-  initTabsScoped(document.body, "#gmMainTabs", 'body[data-page="gm"] .tabPanel');
+  const gmTabs = initTabsScoped(document.body, "#gmMainTabs", 'body[data-page="gm"] .tabPanel');
   initMiniTabsScoped(document.body, "#gmEditorTabs", 'body[data-page="gm"] .miniPanel');
 
   $("#btnSignOut")?.addEventListener("click", async () => {
@@ -600,7 +600,7 @@ function initGM(){
             <button class="btn small" data-edit="1">Editar</button>
           </div>
         `;
-        div.querySelector("[data-edit]")?.addEventListener("click", () => loadSheetIntoForm(id, true));
+        div.querySelector("[data-edit]")?.addEventListener("click", () => { gmTabs.activate("gm_editor"); loadSheetIntoForm(id, true); });
         sheetsList.appendChild(div);
       });
   }
@@ -741,6 +741,7 @@ function initGM(){
   btnNewSheet?.addEventListener("click", () => {
     clearForm();
     openEditor();
+    gmTabs.activate("gm_editor");
     setStatus("Nova ficha (draft).", "ok");
   });
 
@@ -1097,7 +1098,7 @@ function initPlayer(){
   const roomId = mustRoomId();
 
   // Tabs (Player)
-  initTabsScoped(document.body, "#playerBrowserTabs", 'body[data-page="player"] .tabPanel');
+  const plTabs = initTabsScoped(document.body, "#playerBrowserTabs", 'body[data-page="player"] .tabPanel');
   initMiniTabsScoped(document.body, "#playerMiniTabs", 'body[data-page="player"] .miniPanel');
 
   const roomCodeOut = $("#roomCodeOut");
