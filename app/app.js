@@ -743,6 +743,8 @@ function initGM(){
   function clearForm(){
     if(sheetEditorEmpty) sheetEditorEmpty.classList.add("hidden");
     if(sheetEditorPane) sheetEditorPane.classList.remove("hidden");
+    if(sheetEditorEmpty) sheetEditorEmpty.classList.add("hidden");
+    if(sheetEditorPane) sheetEditorPane.classList.remove("hidden");
     sheetIdEl.value = "";
     sheetNameEl.value = "";
     attrQI.value = 0;
@@ -1183,7 +1185,8 @@ function initGM(){
     setStatus(`Erro: ${e?.message || e}`, "err");
   });
 
-  // init
+    btnCancelSheet?.addEventListener("click", ()=>{ closeEditor(); setStatus("Edição cancelada.", "ok"); });
+// init
   closeEditor();
 }
 
