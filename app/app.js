@@ -87,6 +87,19 @@ function linkifyRole(role){
   return role === "GM" ? "GM" : "PLAYER";
 }
 
+// onValue com handler de erro para evitar "Uncaught (in promise) Object"
+function onValueSafe(r, cb, label=""){
+  return onValue(r, cb, (err)=>{
+    console.error("RTDB permission/error", label, err);
+    // tenta mostrar algo útil sem quebrar a página
+    try{
+      const msg = err?.message || err?.code || String(err);
+      setStatus(`Erro RTDB${label ? " ("+label+")" : ""}: ${msg}`, "err");
+    }catch(_){}
+  });
+}
+
+
 /** --------------------------
  * Routing by page
  * -------------------------- */
@@ -968,18 +981,18 @@ function initGM(){
 
     setStatus("OK. Sincronizando...", "ok");
 
-    onValue(ref(db, `rooms/${roomId}/members`), (snap) => {
+    onValueSafe(ref(db, `rooms/${roomId}/members`), (snap) => {
       members = snap.val() || {};
       renderMembers();
       renderAssignPlayers();
-    });
+    }, "members");
 
-    onValue(ref(db, `rooms/${roomId}/sheets`), (snap) => {
+    onValueSafe(ref(db, `rooms/${roomId}/sheets`), (snap) => {
       sheets = snap.val() || {};
       renderSheets();
       renderAssignSheets();
       // não sobrescrever o editor automaticamente
-    });
+    }, "sheets");
   })().catch((e)=>{
     console.error(e);
     setStatus(`Erro: ${e?.message || e}`, "err");
@@ -1147,7 +1160,7 @@ function initPlayer(){
       // Regra: PASSIVA só aplica no atributo dela.
       // - Se p.atributoBase == null: aplica APENAS quando a rolagem não tem atributo (rollAttrKey null).
       // - Se p.atributoBase != null: aplica só quando bate com o atributo da rolagem.
-      const ok = (p.atributoBase == null) ? (rollAttrKey == null) : (p.atributoBase === rollAttrKey);
+      const ok = (p.atributoBase == null) ? true : (p.atributoBase === rollAttrKey);
       if(!ok) continue;
 
       if(p.modMode === "SOMA"){
@@ -1280,10 +1293,10 @@ function initPlayer(){
     uidOut.textContent = "(carregando...)";
 
     // Mostrar nome no lugar do UID (UID real continua sendo o auth.uid)
-    onValue(ref(db, `rooms/${roomId}/members/${uid}`), (ms) => {
+    onValueSafe(ref(db, `rooms/${roomId}/members/${uid}`), (ms) => {
       const m = ms.val();
       uidOut.textContent = m?.displayName || uid;
-    });
+    }, "memberSelf");
 
     setStatus("Carregando meta...", "warn");
     const metaSnap = await get(ref(db, `rooms/${roomId}/meta`));
@@ -1295,7 +1308,7 @@ function initPlayer(){
     roomCodeOut.textContent = meta.code || "?";
 
     setStatus("Carregando atribuição...", "warn");
-    onValue(ref(db, `rooms/${roomId}/assignments/${uid}`), (snap) => {
+    onValueSafe(ref(db, `rooms/${roomId}/assignments/${uid}`), (snap) => {
       const val = snap.val();
       assignedSheetId = val?.sheetId || null;
 
@@ -1309,7 +1322,7 @@ function initPlayer(){
       }
 
       setStatus("Carregando ficha...", "warn");
-      onValue(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}`), (s2) => {
+      onValueSafe(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}`), (s2) => {
         if(!s2.exists()){
           sheet = null;
           renderEmpty();
@@ -1319,8 +1332,8 @@ function initPlayer(){
         sheet = s2.val();
         renderSheet();
         setStatus("OK.", "ok");
-      });
-    });
+    }, "assignment");
+    }, "sheet");
 
     $$(".btn.attr").forEach(btn => btn.addEventListener("click", () => rollAttribute(btn.dataset.attr)));
 
