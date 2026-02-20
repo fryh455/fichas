@@ -42,7 +42,9 @@
         <label>Ficha
           <select id="assignSheet"></select>
         </label>
-        <button id="btnAssign" class="btn primary">Salvar atribuição</button>
+        <button id="btnAssign" class="btn primary">Vincular ficha ao player</button>
+        <div class="muted mt8">Um player pode ter várias fichas e uma ficha pode ter vários players.</div>
+        <div id="playerAssignmentsList" class="list mt12"></div>
       </div>
 
       <div class="card">
@@ -111,6 +113,7 @@
 
         <div class="row">
           <button class="btn primary" type="submit">Salvar ficha</button>
+          <button id="btnCancelSheet" class="btn ghost" type="button">Cancelar</button>
           <button id="btnDeleteSheet" class="btn danger" type="button">Deletar ficha</button>
         </div>
       </form>

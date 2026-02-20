@@ -257,14 +257,17 @@ function initGM(){
   const attrVIG = $("#attrVIG");
   const mentalEl = $("#mental");
   const sharedNotesEl = $("#sharedNotes");
+  const sheetSelectEl = $("#sheetSelect");
   const avatarFileEl = $("#sheetAvatarFile");
   const avatarPreviewEl = $("#sheetAvatarPreview");
   const btnClearAvatar = $("#btnClearAvatar");
+  const btnCancelSheet = $("#btnCancelSheet");
   const btnDeleteSheet = $("#btnDeleteSheet");
 
   const assignPlayer = $("#assignPlayer");
   const assignSheet = $("#assignSheet");
   const btnAssign = $("#btnAssign");
+  const playerAssignmentsList = $("#playerAssignmentsList");
 
   const importText = $("#importText");
   const importFile = $("#importFile");
@@ -312,6 +315,7 @@ function initGM(){
   let meta = null;
   let members = {};
   let sheets = {};
+  let assignmentsByPlayer = {};
   let currentSheetId = null; // slug
   let currentAvatarDataUrl = "";
   let gmNotesUnsub = null;
@@ -663,6 +667,11 @@ function initGM(){
     }
   }
 
+  assignPlayer?.addEventListener("change", ()=>{
+    const pu = assignPlayer.value;
+    if(pu) renderPlayerAssignments(pu);
+  });
+
   function renderAssignSheets(){
     if(!assignSheet) return;
     const list = Object.entries(sheets)
@@ -687,7 +696,53 @@ function initGM(){
     }
   }
 
+  function renderPlayerAssignments(playerUid){
+    if(!playerAssignmentsList) return;
+    playerAssignmentsList.innerHTML = "";
+    if(!playerUid){
+      playerAssignmentsList.innerHTML = '<div class="muted">(selecione um player)</div>';
+      return;
+    }
+    const map = (assignmentsByPlayer && assignmentsByPlayer[playerUid] && typeof assignmentsByPlayer[playerUid] === "object") ? assignmentsByPlayer[playerUid] : {};
+    const sheetIds = Object.keys(map).filter(k=> map[k]);
+    if(sheetIds.length === 0){
+      playerAssignmentsList.innerHTML = '<div class="muted">(sem fichas vinculadas)</div>';
+      return;
+    }
+    sheetIds
+      .map(id=> ({ id, name: sheets?.[id]?.name || id }))
+      .sort((a,b)=> a.name.localeCompare(b.name))
+      .forEach(s=>{
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = `
+          <div class="meta">
+            <div class="title">${escapeHtml(s.name)}</div>
+            <div class="sub"><code>${escapeHtml(s.id)}</code></div>
+          </div>
+          <div class="row" style="margin:0">
+            <button class="btn small danger" data-rm="1">Remover</button>
+          </div>
+        `;
+        div.querySelector("[data-rm]").addEventListener("click", async ()=>{
+          try{
+            const updates = {};
+            updates[`rooms/${roomId}/assignmentsByPlayer/${playerUid}/${s.id}`] = null;
+            updates[`rooms/${roomId}/playersBySheet/${s.id}/${playerUid}`] = null;
+            await update(ref(db), updates);
+            setStatus("Vínculo removido.", "ok");
+          }catch(e){
+            console.error(e);
+            setStatus(`Erro ao remover vínculo: ${e?.message || e}`, "err");
+          }
+        });
+        playerAssignmentsList.appendChild(div);
+      });
+  }
+
   function clearForm(){
+    if(sheetEditorEmpty) sheetEditorEmpty.classList.add("hidden");
+    if(sheetEditorPane) sheetEditorPane.classList.remove("hidden");
     sheetIdEl.value = "";
     sheetNameEl.value = "";
     attrQI.value = 0;
@@ -696,7 +751,7 @@ function initGM(){
     attrVIG.value = 0;
     mentalEl.value = 0;
     if(sharedNotesEl) sharedNotesEl.value = "";
-    if(avatarViewEl) avatarViewEl.src = "";
+    if(avatarPreviewEl) avatarPreviewEl.src = "";
     currentAvatarDataUrl = "";
     if(avatarPreviewEl) avatarPreviewEl.src = "";
     if(avatarFileEl) avatarFileEl.value = "";
@@ -1129,7 +1184,7 @@ function initGM(){
   });
 
   // init
-  clearForm();
+  closeEditor();
 }
 
 /** --------------------------
@@ -1155,6 +1210,7 @@ function initPlayer(){
   const advantagesList = $("#advantagesList");
   const disadvantagesList = $("#disadvantagesList");
   const sharedNotesEl = $("#sharedNotes");
+  const sheetSelectEl = $("#sheetSelect");
 
   const attrSpans = {
     QI: $("#aQI"),
@@ -1164,13 +1220,45 @@ function initPlayer(){
   };
 
   let uid = null;
-  let assignedSheetId = null;
+  let selectedSheetIds = [];
+  let selectedSheetId = null;
   let sheet = null;
   let plNotesUnsub = null;
   let plNotesLocalEditing = false;
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
   const selectedPassives = new Map();
+
+
+  function loadSelectedSheet(){
+    if(!selectedSheetId){
+      sheet = null;
+      renderEmpty();
+      return;
+    }
+    setStatus("Carregando ficha...", "warn");
+
+    // Shared notes live-sync
+    if(sharedNotesEl){
+      if(plNotesUnsub){ try{ plNotesUnsub(); }catch(_){} plNotesUnsub = null; }
+      plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/sharedNotes`), (ns)=>{
+        if(plNotesLocalEditing) return;
+        sharedNotesEl.value = String(ns.val() || "");
+      }, "playerSharedNotes");
+    }
+
+    onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}`), (s2) => {
+      if(!s2.exists()){
+        sheet = null;
+        renderEmpty();
+        setStatus("Ficha selecionada não existe mais.", "err");
+        return;
+      }
+      sheet = s2.val();
+      renderSheet();
+      setStatus("OK.", "ok");
+    }, "sheet");
+  }
 
   function renderEmpty(){
     if(charName) charName.textContent = "(sem ficha)";
@@ -1450,13 +1538,13 @@ function initPlayer(){
     setStatus("Carregando atribuição...", "warn");
     onValueSafe(ref(db, `rooms/${roomId}/assignments/${uid}`), (snap) => {
       const val = snap.val();
-      assignedSheetId = val?.sheetId || null;
+      selectedSheetId = val?.sheetId || null;
 
       selectedPassives.clear();
       if(plNotesUnsub){ try{ plNotesUnsub(); }catch(_){} plNotesUnsub = null; }
       plNotesLocalEditing = false;
 
-      if(!assignedSheetId){
+      if(!selectedSheetId){
         sheet = null;
         renderEmpty();
         setStatus("Sem ficha atribuída. Peça ao GM para atribuir.", "warn");
@@ -1466,12 +1554,12 @@ function initPlayer(){
       setStatus("Carregando ficha...", "warn");
       // Shared notes live-sync
       if(sharedNotesEl){
-        plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/sharedNotes`), (ns)=>{
+        plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/sharedNotes`), (ns)=>{
           if(plNotesLocalEditing) return;
           sharedNotesEl.value = String(ns.val() || "");
         }, "playerSharedNotes");
       }
-      onValueSafe(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}`), (s2) => {
+      onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}`), (s2) => {
         if(!s2.exists()){
           sheet = null;
           renderEmpty();
@@ -1486,6 +1574,12 @@ function initPlayer(){
 
     $$(".btn.attr").forEach(btn => btn.addEventListener("click", () => rollAttribute(btn.dataset.attr)));
 
+    sheetSelectEl?.addEventListener("change", ()=>{
+      selectedSheetId = sheetSelectEl.value || null;
+      selectedPassives.clear();
+      loadSelectedSheet();
+    });
+
 $$(".btn.die").forEach(btn => {
       btn.addEventListener("click", () => {
         const n = Number(btn.dataset.die);
@@ -1497,9 +1591,9 @@ $$(".btn.die").forEach(btn => {
 
     if(sharedNotesEl){
       const saveNotes = debounce(async ()=>{
-        if(!assignedSheetId) return;
+        if(!selectedSheetId) return;
         try{
-          await set(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/sharedNotes`), String(sharedNotesEl.value || ""));
+          await set(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/sharedNotes`), String(sharedNotesEl.value || ""));
           setStatus("Anotações salvas.", "ok");
         }catch(e){
           console.error(e);

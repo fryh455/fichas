@@ -17,22 +17,28 @@
         "members": {
           ".read": "auth != null",
           "$uid": {
-            ".write": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val()) || (auth.uid == $uid && !data.exists())"
+            ".write": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || (auth.uid == $uid && !data.exists()))"
           }
         },
-        "assignments": {
+        "assignmentsByPlayer": {
           "$uid": {
-            ".read": "auth != null && auth.uid == $uid || (auth != null && auth.uid == data.parent().parent().child('meta/gmUid').val())",
+            ".read": "auth != null && (auth.uid == $uid || auth.uid == data.parent().parent().child('meta/gmUid').val())",
+            ".write": "auth != null && auth.uid == data.parent().parent().child('meta/gmUid').val()"
+          }
+        },
+        "playersBySheet": {
+          "$sheetId": {
+            ".read": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || data.child(auth.uid).exists())",
             ".write": "auth != null && auth.uid == data.parent().parent().child('meta/gmUid').val()"
           }
         },
         "sheets": {
           "$sheetId": {
-            ".read": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || data.parent().parent().child('assignments/'+auth.uid+'/sheetId').val() == $sheetId)",
+            ".read": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || data.parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())",
             ".write": "auth != null && auth.uid == data.parent().parent().child('meta/gmUid').val()",
             "sharedNotes": {
-              ".read": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('assignments/'+auth.uid+'/sheetId').val() == $sheetId)",
-              ".write": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('assignments/'+auth.uid+'/sheetId').val() == $sheetId)"
+              ".read": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())",
+              ".write": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())"
             }
           }
         }
