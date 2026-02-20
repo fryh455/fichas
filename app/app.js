@@ -318,8 +318,8 @@ function initGM(){
         div.innerHTML = `
           <div class="meta">
             <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
-            <div class="sub"><code>${id}</code></div>
-            <div class="kv">${badges} ${uses}</div>
+            <div class="sub"></div>
+<div class="kv">${badges} ${uses}</div>
           </div>
           <div class="row" style="margin:0">
             <button class="btn small" data-edit="${id}">Editar</button>
@@ -363,6 +363,16 @@ function initGM(){
     entryNotes.value = "";
   }
 
+  function nextAvailableEntryId(category, baseSlug){
+    const obj = ensureObj(currentSheetDraft?.[category]);
+    if(!obj[baseSlug]) return baseSlug;
+    for(let i=2;i<200;i++){
+      const cand = `${baseSlug}-${i}`;
+      if(!obj[cand]) return cand;
+    }
+    throw new Error("Não foi possível gerar sufixo disponível (registro).");
+  }
+
   function createNewEntry(category){
     if(!currentSheetDraft){
       setStatus("Selecione/crie uma ficha primeiro.", "err");
@@ -382,9 +392,8 @@ function initGM(){
 
   btnSaveEntry.addEventListener("click", ()=>{
     const category = entryCategory.value;
-    const id = entryId.value;
+    const oldId = entryId.value;
     if(!currentSheetDraft) return setStatus("Sem ficha carregada.", "err");
-    if(!id) return setStatus("Selecione um registro para salvar.", "err");
 
     const payload = normalizeEntryPayload({
       name: entryName.value,
@@ -396,6 +405,46 @@ function initGM(){
       usesMax: entryUsesMax.value,
       notes: entryNotes.value
     });
+
+    if(!payload.name){
+      return setStatus("Nome do registro é obrigatório.", "err");
+    }
+
+    const baseSlug = slugify(payload.name);
+    if(!baseSlug) return setStatus("Nome inválido para gerar ID do registro.", "err");
+
+    currentSheetDraft[category] = ensureObj(currentSheetDraft[category]);
+
+    // Se for novo ou renomeado, mover para o slug do nome (com sufixo se necessário)
+    let finalId = baseSlug;
+    if(!oldId){
+      finalId = nextAvailableEntryId(category, baseSlug);
+    }else if(oldId !== baseSlug && oldId !== `${baseSlug}`){
+      // renomeou
+      if(currentSheetDraft[category][baseSlug] && baseSlug !== oldId){
+        const overwrite = confirm(`Já existe um registro "${baseSlug}" nesta categoria.
+
+OK = sobrescrever
+Cancelar = criar sufixo (-2, -3...)`);
+        finalId = overwrite ? baseSlug : nextAvailableEntryId(category, baseSlug);
+      }else{
+        finalId = baseSlug;
+      }
+    }else{
+      finalId = oldId;
+    }
+
+    // Escreve e remove o antigo se mudou
+    currentSheetDraft[category][finalId] = payload;
+    if(oldId && oldId !== finalId){
+      delete currentSheetDraft[category][oldId];
+    }
+
+    renderEntryLists();
+    selectEntry(category, finalId);
+    setStatus("Registro salvo no draft (salvar ficha para persistir).", "ok");
+  });
+
 
     if(!payload.name){
       return setStatus("Nome do registro é obrigatório.", "err");
@@ -458,6 +507,8 @@ function initGM(){
       sheets = snap.val() || {};
       renderSheets();
       renderAssignSheets();
+
+      // Não recarregar automaticamente o editor aqui para não sobrescrever edições locais.
       // keep current selection updated
       if(currentSheetId && sheets[currentSheetId]){
         // refresh draft from RTDB only if we are not actively editing? keep simple: always refresh if ids match.
@@ -1282,28 +1333,15 @@ function initPlayer(){
     lines.push(`${title}`);
     lines.push("");
     lines.push(`d12: ${d12}`);
-    if(diceBonus !== 0) lines.push(`diceBonus (mental): ${diceBonus}`);
-    if(baseAttrValue !== 0) lines.push(`atributo: ${baseAttrKey ? baseAttrKey : "(nenhum)"} = ${baseAttrValue}`);
-    if(somaPass !== 0) lines.push(`passivas SOMA: ${somaPass}`);
-    if(somaAtiva !== 0) lines.push(`ativa SOMA: ${somaAtiva} (${activeLabel})`);
-    lines.push(`subtotal: ${subtotal}`);
-    if(hasMult) lines.push(`MULT total: ${multValue}  -> floor(subtotal * (1 + mult))`);
-    lines.push(`crítico?: ${isCrit ? "SIM (d12=12)" : "NÃO"}`);
-    lines.push(`totalFinal: ${totalFinal}`);
 
-    if(pass.applied.length){
-      lines.push("");
-      lines.push("Passivas aplicadas:");
-      for(const p of pass.applied){
-        const sign = p.value > 0 ? "+" : "";
-        lines.push(`- ${p.name}: ${p.mode} ${sign}${p.value}`);
-      }
-    }
-    if(activeMod && (activeMod.value || 0) !== 0){
-      lines.push("");
-      const sign = activeMod.value > 0 ? "+" : "";
-      lines.push(`Ativa aplicada: ${activeLabel} (${activeMod.mode} ${sign}${activeMod.value})`);
-    }
+    if(diceBonus !== 0) lines.push(`diceBonus: ${diceBonus}`);
+    if(baseAttrValue !== 0) lines.push(`atributo: ${baseAttrValue}`);
+    if(somaPass !== 0) lines.push(`passivas(SOMA): ${somaPass}`);
+    if(somaAtiva !== 0) lines.push(`ativa(SOMA): ${somaAtiva}`);
+    if(hasMult) lines.push(`mult: ${multValue}`);
+    if(isCrit) lines.push(`crítico: SIM`);
+
+    lines.push(`total: ${totalFinal}`);
 
     rollOut.textContent = lines.join("
 ");
