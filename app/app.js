@@ -406,56 +406,6 @@ function initGM(){
       notes: entryNotes.value
     });
 
-    if(!payload.name){
-      return setStatus("Nome do registro é obrigatório.", "err");
-    }
-
-    const baseSlug = slugify(payload.name);
-    if(!baseSlug) return setStatus("Nome inválido para gerar ID do registro.", "err");
-
-    currentSheetDraft[category] = ensureObj(currentSheetDraft[category]);
-
-    // Se for novo ou renomeado, mover para o slug do nome (com sufixo se necessário)
-    let finalId = baseSlug;
-    if(!oldId){
-      finalId = nextAvailableEntryId(category, baseSlug);
-    }else if(oldId !== baseSlug && oldId !== `${baseSlug}`){
-      // renomeou
-      if(currentSheetDraft[category][baseSlug] && baseSlug !== oldId){
-        const overwrite = confirm(`Já existe um registro "${baseSlug}" nesta categoria.
-
-OK = sobrescrever
-Cancelar = criar sufixo (-2, -3...)`);
-        finalId = overwrite ? baseSlug : nextAvailableEntryId(category, baseSlug);
-      }else{
-        finalId = baseSlug;
-      }
-    }else{
-      finalId = oldId;
-    }
-
-    // Escreve e remove o antigo se mudou
-    currentSheetDraft[category][finalId] = payload;
-    if(oldId && oldId !== finalId){
-      delete currentSheetDraft[category][oldId];
-    }
-
-    renderEntryLists();
-    selectEntry(category, finalId);
-    setStatus("Registro salvo no draft (salvar ficha para persistir).", "ok");
-  });
-
-
-    if(!payload.name){
-      return setStatus("Nome do registro é obrigatório.", "err");
-    }
-
-    currentSheetDraft[category] = ensureObj(currentSheetDraft[category]);
-    currentSheetDraft[category][id] = payload;
-    renderEntryLists();
-    setStatus("Registro atualizado no draft (salvar ficha para persistir).", "ok");
-  });
-
   btnDeleteEntry.addEventListener("click", ()=>{
     const category = entryCategory.value;
     const id = entryId.value;
@@ -507,13 +457,6 @@ Cancelar = criar sufixo (-2, -3...)`);
       sheets = snap.val() || {};
       renderSheets();
       renderAssignSheets();
-
-      // Não recarregar automaticamente o editor aqui para não sobrescrever edições locais.
-      // keep current selection updated
-      if(currentSheetId && sheets[currentSheetId]){
-        // refresh draft from RTDB only if we are not actively editing? keep simple: always refresh if ids match.
-        loadSheetIntoForm(currentSheetId, false);
-      }
     });
   })().catch((e)=>{
     console.error(e);
