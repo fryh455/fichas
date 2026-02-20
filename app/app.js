@@ -119,8 +119,10 @@ function initTabsScoped(root, barSel, panelSel){
     panels.forEach(p=> p.classList.toggle("active", p.dataset.panel === tab));
   }
   btns.forEach(b=> b.addEventListener("click", ()=> activate(b.dataset.tab)));
-  const first = btns.find(b=> b.classList.contains("active")) || btns[0];
-  if(first) activate(first.dataset.tab);
+  const activePanel = panels.find(p=> p.classList.contains("active"));
+  const first = btns.find(b=> b.classList.contains("active")) || null;
+  if(first){ activate(first.dataset.tab); }
+  else if(!activePanel && btns[0]){ activate(btns[0].dataset.tab); }
   return { activate };
 }
 
@@ -742,6 +744,8 @@ function initGM(){
     clearForm();
     openEditor();
     gmTabs.activate("gm_editor");
+    // garante painel visível
+    openEditor();
     setStatus("Nova ficha (draft).", "ok");
   });
 
@@ -1143,7 +1147,7 @@ function initPlayer(){
     if(itemsList) itemsList.innerHTML = "";
     if(advantagesList) advantagesList.innerHTML = "";
     if(disadvantagesList) disadvantagesList.innerHTML = "";
-    if(rollOut) rollOut.textContent = "";
+    
     if(sharedNotesEl) sharedNotesEl.value = "";
   }
 

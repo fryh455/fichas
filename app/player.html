@@ -8,6 +8,7 @@
 </head>
 <body data-page="player">
   
+
 <main class="container">
   <header class="topbar">
     <div>
@@ -21,20 +22,20 @@
 
   <div id="status" class="status"></div>
 
-  <!-- Browser-like tabs -->
+  <!-- Browser-like tabs: characters are the tabs; rolls is a separate tab -->
   <div class="tabsBar" id="playerBrowserTabs">
-    <button class="tabBtn active" data-tab="pl_mine">Suas fichas</button>
-    <div id="playerCharTabs" class="chromeTabs" style="margin-left:8px"></div>
+    <!-- hidden "pl_char" button so tab system has a target; real tabs are the character buttons -->
+    <button class="tabBtn hidden" data-tab="pl_char" type="button">Personagem</button>
+
+    <div id="playerCharTabs" class="chromeTabs"></div>
     <div class="spacer"></div>
-    <button class="tabBtn" data-tab="pl_rolls">Rolagens</button>
+    <button class="tabBtn" data-tab="pl_rolls" type="button">Rolagens</button>
   </div>
 
-  <!-- Panels -->
-  <div class="tabPanel active" data-panel="pl_mine">
+  <div class="tabPanel active" data-panel="pl_empty">
     <section class="card">
-      <h2>Suas fichas</h2>
-      <div id="mySheetsList" class="list"></div>
-      <div class="muted mt12">Clique em uma ficha para abrir a aba do personagem.</div>
+      <h2>Sem fichas atribuídas</h2>
+      <div class="muted">Peça ao GM para vincular uma ficha a você.</div>
     </section>
   </div>
 
@@ -130,7 +131,6 @@
 
       <div class="mt16">
         <h3>Anotações</h3>
-        <div class="muted">Compartilhadas (GM e players).</div>
         <textarea id="sharedNotes" class="textarea mt12" rows="6" placeholder="Escreva aqui..."></textarea>
       </div>
     </section>
@@ -158,6 +158,7 @@
     </section>
   </div>
 </main>
+
 
 
   <script type="module" src="./app.js"></script>
