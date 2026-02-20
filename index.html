@@ -2,44 +2,32 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Fichas Online — Entrar / Criar</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fichas Online</title>
   <link rel="stylesheet" href="./app/app.css" />
 </head>
 <body data-page="index">
   <main class="container">
-    <header class="header">
-      <h1>Fichas Online</h1>
-      <p class="muted">Firebase Auth (anônimo) + Realtime Database • GitHub Pages</p>
-    </header>
+    <h1>Fichas Online</h1>
 
-    <section class="card">
-      <h2>Entrar / Criar mesa</h2>
+    <div id="status" class="status"></div>
 
-      <div class="grid">
-        <label class="field">
-          <span>Seu nome (displayName)</span>
-          <input id="displayName" type="text" autocomplete="nickname" placeholder="Ex: Níckollas" maxlength="40" />
-        </label>
+    <div class="card">
+      <label>displayName
+        <input id="displayName" autocomplete="nickname" />
+      </label>
 
-        <label class="field">
-          <span>Código da mesa (roomCode)</span>
-          <input id="roomCode" type="text" autocomplete="off" placeholder="Ex: ABC123" maxlength="24" />
-          <small class="hint">Letras/números. Sem espaços.</small>
-        </label>
-      </div>
+      <label>roomCode
+        <input id="roomCode" autocomplete="off" />
+      </label>
 
       <div class="row">
         <button id="btnCreate" class="btn primary">Criar mesa</button>
         <button id="btnJoin" class="btn">Entrar na mesa</button>
       </div>
+    </div>
 
-      <div id="status" class="status" role="status" aria-live="polite"></div>
-    </section>
-
-    <footer class="footer muted">
-      <span>Abra via Live Server apontando para a raiz do projeto (index.html).</span>
-    </footer>
+    <p class="muted">Abra via Live Server na raiz.</p>
   </main>
 
   <script type="module" src="./app/app.js"></script>

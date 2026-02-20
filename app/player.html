@@ -2,63 +2,70 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Player — Fichas Online</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Player • Ficha</title>
   <link rel="stylesheet" href="./app.css" />
 </head>
 <body data-page="player">
   <main class="container">
-    <header class="header">
-      <h1>Player</h1>
-      <div class="muted">Sala: <strong id="roomCodeOut">...</strong></div>
-      <div class="muted">Seu UID: <code id="uidOut">...</code></div>
-<h3>Atributos</h3>
-      <div class="grid4">
+    <header class="topbar">
+      <div>
+        <h1>Player</h1>
+        <div class="muted">code: <strong id="roomCodeOut">?</strong> • você: <strong id="uidOut">?</strong></div>
+      </div>
+      <button id="btnSignOut" class="btn danger">Sair</button>
+    </header>
+
+    <div id="status" class="status"></div>
+
+    <section class="card">
+      <h2 id="charName">(sem ficha)</h2>
+      <div class="muted">Mental: <strong id="mentalOut">0</strong></div>
+
+      <div class="grid4" style="margin-top:12px">
         <button class="btn attr" data-attr="QI">QI: <span id="aQI">0</span></button>
         <button class="btn attr" data-attr="FOR">FOR: <span id="aFOR">0</span></button>
         <button class="btn attr" data-attr="DEX">DEX: <span id="aDEX">0</span></button>
         <button class="btn attr" data-attr="VIG">VIG: <span id="aVIG">0</span></button>
       </div>
-      <small class="hint muted">Clique em um atributo para rolar.</small>
+
+      <div class="mt12">
+        <h3>Anotações compartilhadas</h3>
+        <textarea id="sharedNotes" rows="6" spellcheck="false" placeholder="Escreva anotações... (salva automático)"></textarea>
+      </div>
+
+      <div class="mt12">
+        <h3>Rolagem</h3>
+        <pre id="rollOut" class="pre"></pre>
+      </div>
+
+      <div class="mt12">
+        <h3>Dados soltos</h3>
+        <div class="row wrap">
+          <button class="btn die" data-die="4">d4</button>
+          <button class="btn die" data-die="6">d6</button>
+          <button class="btn die" data-die="8">d8</button>
+          <button class="btn die" data-die="10">d10</button>
+          <button class="btn die" data-die="12">d12</button>
+        </div>
+        <div class="muted" id="diceOut"></div>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Mods ativos (local)</h2>
-      <div id="modsActive" class="list"></div>
-      <small class="hint muted">Passivas marcadas como “usar como mod” entram aqui (não salva no banco).</small>
-    </section>
-
-    <section class="card">
-      <h2>Itens</h2>
-      <div id="itemsList" class="list"></div>
-    </section>
-
-    <section class="card">
-      <h2>Vantagens</h2>
-      <div id="advantagesList" class="list"></div>
+    <section class="grid2">
+      <div class="card">
+        <h2>Itens</h2>
+        <div id="itemsList" class="list"></div>
+      </div>
+      <div class="card">
+        <h2>Vantagens</h2>
+        <div id="advantagesList" class="list"></div>
+      </div>
     </section>
 
     <section class="card">
       <h2>Desvantagens</h2>
       <div id="disadvantagesList" class="list"></div>
-    </section>
-
-    <section class="card">
-      <h2>Rolagem</h2>
-      <div id="rollOut" class="pre"></div>
-      <small class="hint muted">Atributo/Ativa rolam com mental + mods passivos selecionados.</small>
-    </section>
-
-    <section class="card">
-      <h2>Dados soltos</h2>
-      <div class="row wrap">
-        <button class="btn die" data-die="4">d4</button>
-        <button class="btn die" data-die="6">d6</button>
-        <button class="btn die" data-die="8">d8</button>
-        <button class="btn die" data-die="10">d10</button>
-        <button class="btn die" data-die="12">d12</button>
-      </div>
-      <div id="diceOut" class="pre"></div>
     </section>
   </main>
 

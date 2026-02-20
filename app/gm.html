@@ -2,249 +2,173 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GM — Fichas Online</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GM • Fichas</title>
   <link rel="stylesheet" href="./app.css" />
 </head>
 <body data-page="gm">
   <main class="container">
-    <header class="header">
-      <h1>GM</h1>
-      <div class="muted">Sala: <strong id="roomCodeOut">...</strong></div>
-      <div class="muted">RoomId: <code id="roomIdOut">...</code></div>
-      <div class="row">
-        <a class="link" href="../index.html">← Voltar</a>
-        <button id="btnSignOut" class="btn danger">Sair (logout)</button>
+    <header class="topbar">
+      <div>
+        <h1>GM</h1>
+        <div class="muted">roomId: <code id="roomIdOut"></code> • code: <strong id="roomCodeOut">?</strong></div>
       </div>
-      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <button id="btnSignOut" class="btn danger">Sair</button>
     </header>
 
-    <section class="card">
-      <h2>Membros</h2>
-      <div id="membersList" class="list"></div>
-    </section>
+    <div id="status" class="status"></div>
 
-    <section class="card">
-      <h2>Fichas (CRUD) — ID = slug(name)</h2>
+    <section class="grid2">
+      <div class="card">
+        <h2>Membros</h2>
+        <div id="membersList" class="list"></div>
+      </div>
 
-      <div class="split">
-        <div>
-          <div class="row between">
-            <strong>Lista de fichas</strong>
-            <button id="btnNewSheet" class="btn small">+ Nova ficha</button>
-          </div>
-          <div id="sheetsList" class="list"></div>
-          <small class="hint muted">Ao criar/renomear, o ID é slug do nome. Se colidir, você escolhe sobrescrever ou sufixo -2/-3…</small>
+      <div class="card">
+        <h2>Fichas</h2>
+        <div class="row">
+          <button id="btnNewSheet" class="btn primary">Nova ficha</button>
         </div>
-
-        <div id="sheetEditorEmpty" class="muted" style="padding:12px;border:1px dashed rgba(37,42,54,.9);border-radius:14px;margin-bottom:12px;">Selecione uma ficha na lista ou clique em “+ Nova ficha” para abrir o editor.</div>
-        <div id="sheetEditorPane" class="hidden">
-          <strong id="sheetFormTitle">Editar / Criar</strong>
-          <form id="sheetForm" class="form" autocomplete="off">
-            <input type="hidden" id="sheetId" />
-
-            <label class="field">
-              <span>Nome</span>
-              <input id="sheetName" type="text" maxlength="60" placeholder="Ex: Guerreiro X" required />
-            </label>
-
-            <div class="grid4">
-              <label class="field">
-                <span>QI</span>
-                <input id="attrQI" type="number" step="1" />
-              </label>
-              <label class="field">
-                <span>FOR</span>
-                <input id="attrFOR" type="number" step="1" />
-              </label>
-              <label class="field">
-                <span>DEX</span>
-                <input id="attrDEX" type="number" step="1" />
-              </label>
-              <label class="field">
-                <span>VIG</span>
-                <input id="attrVIG" type="number" step="1" />
-              </label>
-            </div>
-
-            <label class="field">
-              <span>Mental (int)</span>
-              <input id="mental" type="number" step="1" />
-            </label>
-
-            <div class="row">
-              <button id="btnSaveSheet" type="submit" class="btn primary">Salvar</button>
-              <button id="btnDeleteSheet" type="button" class="btn danger">Deletar</button>
-            </div>
-
-            <details class="details">
-              <summary>Itens</summary>
-              <div class="row between">
-                <strong>Lista</strong>
-                <button id="btnAddItem" type="button" class="btn small">+ Adicionar</button>
-              </div>
-              <div id="itemsCrudList" class="list"></div>
-            </details>
-
-            <details class="details">
-              <summary>Vantagens</summary>
-              <div class="row between">
-                <strong>Lista</strong>
-                <button id="btnAddAdv" type="button" class="btn small">+ Adicionar</button>
-              </div>
-              <div id="advantagesCrudList" class="list"></div>
-            </details>
-
-            <details class="details">
-              <summary>Desvantagens</summary>
-              <div class="row between">
-                <strong>Lista</strong>
-                <button id="btnAddDis" type="button" class="btn small">+ Adicionar</button>
-              </div>
-              <div id="disadvantagesCrudList" class="list"></div>
-            </details>
-
-            <details class="details">
-              <summary>Editor de registro selecionado</summary>
-              <div class="grid">
-                <label class="field">
-                  <span>Categoria</span>
-                  <select id="entryCategory">
-                    <option value="items">Itens</option>
-                    <option value="advantages">Vantagens</option>
-                    <option value="disadvantages">Desvantagens</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>ID interno</span>
-                  <input id="entryId" type="text" readonly />
-                </label>
-              </div>
-
-              <label class="field">
-                <span>Nome</span>
-                <input id="entryName" type="text" maxlength="80" />
-              </label>
-
-              <div class="grid">
-                <label class="field">
-                  <span>Type</span>
-                  <select id="entryType">
-                    <option value="ATIVA">ATIVA</option>
-                    <option value="PASSIVA">PASSIVA</option>
-                  </select>
-                </label>
-
-                <label class="field">
-                  <span>Atributo base</span>
-                  <select id="entryAttrBase">
-                    <option value="">(nenhum)</option>
-                    <option value="QI">QI</option>
-                    <option value="FOR">FOR</option>
-                    <option value="DEX">DEX</option>
-                    <option value="VIG">VIG</option>
-                  </select>
-                </label>
-              </div>
-
-              <div class="grid">
-                <label class="field">
-                  <span>modMode</span>
-                  <select id="entryModMode">
-                    <option value="SOMA">SOMA</option>
-                    <option value="MULT">MULT</option>
-                    <option value="NONE">NONE</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>modValue (number)</span>
-                  <input id="entryModValue" type="number" step="0.1" />
-                </label>
-              </div>
-
-              <div class="grid">
-                <label class="field">
-                  <span>usesCurrent</span>
-                  <input id="entryUsesCurrent" type="number" step="1" />
-                </label>
-                <label class="field">
-                  <span>usesMax</span>
-                  <input id="entryUsesMax" type="number" step="1" />
-                </label>
-              </div>
-
-              <label class="field">
-                <span>notes</span>
-                <textarea id="entryNotes" rows="4"></textarea>
-              </label>
-
-              <div class="row">
-                <button id="btnSaveEntry" type="button" class="btn primary">Salvar registro</button>
-                <button id="btnDeleteEntry" type="button" class="btn danger">Deletar registro</button>
-                <button id="btnClearEntry" type="button" class="btn">Limpar seleção</button>
-              </div>
-
-              <small class="hint muted">usesCurrent/usesMax são exibidos no player (sem lógica pesada). Para itens, pode deixar vazio.</small>
-            </details>
-
-          </form>
-        </div>
+        <div id="sheetsList" class="list"></div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Atribuir ficha para player</h2>
-      <div class="grid">
-        <label class="field">
-          <span>Player</span>
+    <section class="grid2">
+      <div class="card">
+        <h2>Atribuir ficha</h2>
+        <label>Player
           <select id="assignPlayer"></select>
         </label>
-        <label class="field">
-          <span>Ficha</span>
+        <label>Ficha
           <select id="assignSheet"></select>
         </label>
-      </div>
-      <div class="row">
         <button id="btnAssign" class="btn primary">Salvar atribuição</button>
       </div>
-      <small class="hint muted">Salva em /assignments/{playerUid} = { sheetId }</small>
-    </section>
 
-    <section class="card">
-      <h2>Import massivo (JSON)</h2>
-      <div class="grid">
-        <label class="field">
-          <span>Colar JSON</span>
-          <textarea id="importText" rows="10" placeholder='{"sheets":[{"name":"Nome","attributes":{"QI":1,"FOR":1,"DEX":1,"VIG":1},"mental":0,"items":[...],"advantages":[...],"disadvantages":[...]}]}'></textarea>
-        </label>
-        <label class="field">
-          <span>Upload .json</span>
-          <input id="importFile" type="file" accept=".json,application/json" />
-          <small class="hint">Se escolher arquivo, ele substitui o texto.</small>
-        </label>
-      </div>
-
-      <div class="grid">
-        <label class="field">
-          <span>Modo</span>
+      <div class="card">
+        <h2>Import massivo</h2>
+        <label>Modo
           <select id="importMode">
-            <option value="MERGE">MERGE (sobrescreve pelo slug final)</option>
-            <option value="CREATE_ONLY">CREATE-ONLY (sempre cria novo slug com sufixo)</option>
+            <option value="MERGE">MERGE</option>
+            <option value="CREATE_ONLY">CREATE-ONLY</option>
           </select>
         </label>
-      </div>
-
-      <div class="row">
-        <button id="btnValidateImport" class="btn">Validar</button>
-        <button id="btnDoImport" class="btn primary">Importar</button>
-      </div>
-
-      <details class="details">
-        <summary>Resultado da validação</summary>
+        <label>Upload .json
+          <input id="importFile" type="file" accept=".json,application/json" />
+        </label>
+        <label>JSON
+          <textarea id="importText" rows="8" spellcheck="false"></textarea>
+        </label>
+        <div class="row">
+          <button id="btnValidateImport" class="btn">Validar</button>
+          <button id="btnDoImport" class="btn primary">Importar</button>
+        </div>
         <pre id="importReport" class="pre"></pre>
-      </details>
+      </div>
+    </section>
 
-      <small class="hint muted">Import usa multi-location update para performance.</small>
+    <section class="card" id="sheetEditorEmpty">
+      <div class="muted">Selecione uma ficha para editar ou clique “Nova ficha”.</div>
+    </section>
+
+    <section class="card hidden" id="sheetEditorPane">
+      <h2 id="sheetFormTitle">Criar</h2>
+
+      <form id="sheetForm" class="form">
+        <input id="sheetId" type="hidden" />
+        <label>Nome (ID = slug do nome)
+          <input id="sheetName" />
+        </label>
+
+        <div class="grid4">
+          <label>QI <input id="attrQI" type="number" step="1" /></label>
+          <label>FOR <input id="attrFOR" type="number" step="1" /></label>
+          <label>DEX <input id="attrDEX" type="number" step="1" /></label>
+          <label>VIG <input id="attrVIG" type="number" step="1" /></label>
+        </div>
+
+        <label>Mental (int)
+          <input id="mental" type="number" step="1" />
+        </label>
+
+        <label>Anotações compartilhadas (GM + Player)
+          <textarea id="sharedNotes" rows="6" spellcheck="false" placeholder="Anotações da ficha..."></textarea>
+        </label>
+
+        <div class="row">
+          <button class="btn primary" type="submit">Salvar ficha</button>
+          <button id="btnDeleteSheet" class="btn danger" type="button">Deletar ficha</button>
+        </div>
+      </form>
+
+      <hr />
+
+      <section class="grid2">
+        <div>
+          <h3>Itens</h3>
+          <div class="row"><button id="btnAddItem" class="btn small">Adicionar</button></div>
+          <div id="itemsCrudList" class="list"></div>
+        </div>
+        <div>
+          <h3>Vantagens</h3>
+          <div class="row"><button id="btnAddAdv" class="btn small">Adicionar</button></div>
+          <div id="advantagesCrudList" class="list"></div>
+        </div>
+      </section>
+
+      <section class="grid2" style="margin-top:16px">
+        <div>
+          <h3>Desvantagens</h3>
+          <div class="row"><button id="btnAddDis" class="btn small">Adicionar</button></div>
+          <div id="disadvantagesCrudList" class="list"></div>
+        </div>
+
+        <div>
+          <h3>Editor</h3>
+          <div class="form">
+            <label>Categoria
+              <select id="entryCategory">
+                <option value="items">items</option>
+                <option value="advantages">advantages</option>
+                <option value="disadvantages">disadvantages</option>
+              </select>
+            </label>
+            <input id="entryId" type="hidden" />
+            <label>Nome <input id="entryName" /></label>
+            <label>Tipo
+              <select id="entryType">
+                <option value="PASSIVA">PASSIVA</option>
+                <option value="ATIVA">ATIVA</option>
+              </select>
+            </label>
+            <label>Atributo base
+              <select id="entryAttrBase">
+                <option value="">(nenhum)</option>
+                <option value="QI">QI</option>
+                <option value="FOR">FOR</option>
+                <option value="DEX">DEX</option>
+                <option value="VIG">VIG</option>
+              </select>
+            </label>
+            <label>modMode
+              <select id="entryModMode">
+                <option value="NONE">NONE</option>
+                <option value="SOMA">SOMA</option>
+                <option value="MULT">MULT</option>
+              </select>
+            </label>
+            <label>modValue <input id="entryModValue" type="number" step="0.1" /></label>
+            <label>usesCurrent <input id="entryUsesCurrent" type="number" step="1" /></label>
+            <label>usesMax <input id="entryUsesMax" type="number" step="1" /></label>
+            <label>Notes <textarea id="entryNotes" rows="3"></textarea></label>
+            <div class="row">
+              <button id="btnSaveEntry" class="btn primary small" type="button">Salvar registro</button>
+              <button id="btnDeleteEntry" class="btn danger small" type="button">Deletar</button>
+              <button id="btnClearEntry" class="btn small" type="button">Limpar</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
 

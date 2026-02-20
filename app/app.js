@@ -83,6 +83,14 @@ function slugify(input){
 
 function ensureObj(x){ return (x && typeof x === "object" && !Array.isArray(x)) ? x : {}; }
 
+function debounce(fn, ms){
+  let t = null;
+  return (...args)=>{
+    if(t) clearTimeout(t);
+    t = setTimeout(()=> fn(...args), ms);
+  };
+}
+
 function linkifyRole(role){
   return role === "GM" ? "GM" : "PLAYER";
 }
@@ -210,6 +218,7 @@ function initGM(){
   const attrDEX = $("#attrDEX");
   const attrVIG = $("#attrVIG");
   const mentalEl = $("#mental");
+  const sharedNotesEl = $("#sharedNotes");
   const btnDeleteSheet = $("#btnDeleteSheet");
 
   const assignPlayer = $("#assignPlayer");
@@ -263,7 +272,18 @@ function initGM(){
   let members = {};
   let sheets = {};
   let currentSheetId = null; // slug
+  let gmNotesUnsub = null;
+  let gmNotesLocalEditing = false;
   let currentSheetDraft = null; // {items,advantages,disadvantages}
+
+  function debounce(fn, ms){
+    let t = null;
+    return (...args)=>{
+      if(t) clearTimeout(t);
+      t = setTimeout(()=> fn(...args), ms);
+    };
+  }
+
 
   function emptyEntry(){
     return {
@@ -477,6 +497,25 @@ function initGM(){
     setStatus("Seleção limpa.", "ok");
   });
 
+  if(sharedNotesEl){
+    const saveNotes = debounce(async ()=>{
+      if(!currentSheetId) return;
+      try{
+        await set(ref(db, `rooms/${roomId}/sheets/${currentSheetId}/sharedNotes`), String(sharedNotesEl.value || ""));
+        setStatus("Anotações salvas.", "ok");
+      }catch(e){
+        console.error(e);
+        setStatus(`Erro ao salvar anotações: ${e?.message || e}`, "err");
+      }
+    }, 400);
+
+    sharedNotesEl.addEventListener("input", ()=>{
+      gmNotesLocalEditing = true;
+      saveNotes();
+    });
+    sharedNotesEl.addEventListener("blur", ()=>{ gmNotesLocalEditing = false; });
+  }
+
   // ---- Sheets ----
   function numOr0(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
   function intOr0(v){ const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : 0; }
@@ -588,6 +627,8 @@ function initGM(){
     attrDEX.value = 0;
     attrVIG.value = 0;
     mentalEl.value = 0;
+    if(sharedNotesEl) sharedNotesEl.value = "";
+    if(gmNotesUnsub){ try{ gmNotesUnsub(); }catch(_){} gmNotesUnsub = null; }
     $("#sheetFormTitle") && ($("#sheetFormTitle").textContent = "Criar");
     currentSheetId = null;
     currentSheetDraft = { items:{}, advantages:{}, disadvantages:{} };
@@ -636,6 +677,17 @@ function initGM(){
     attrDEX.value = numOr0(s?.attributes?.DEX);
     attrVIG.value = numOr0(s?.attributes?.VIG);
     mentalEl.value = intOr0(s?.mental);
+
+    // Shared notes live-sync
+    if(sharedNotesEl){
+      sharedNotesEl.value = String(s?.sharedNotes || "");
+      gmNotesLocalEditing = false;
+      if(gmNotesUnsub) { try{ gmNotesUnsub(); }catch(_){} }
+      gmNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${id}/sharedNotes`), (ns)=>{
+        if(gmNotesLocalEditing) return;
+        sharedNotesEl.value = String(ns.val() || "");
+      }, "gmSharedNotes");
+    }
 
     currentSheetDraft = {
       items: ensureObj(s?.items),
@@ -697,6 +749,7 @@ function initGM(){
           VIG: asNum(attrVIG.value, 0),
         },
         mental: asInt(mentalEl.value, 0),
+        sharedNotes: sharedNotesEl ? String(sharedNotesEl.value || "") : (sheets[oldId]?.sharedNotes || ""),
         items: ensureObj(currentSheetDraft?.items),
         advantages: ensureObj(currentSheetDraft?.advantages),
         disadvantages: ensureObj(currentSheetDraft?.disadvantages),
@@ -1023,6 +1076,7 @@ function initPlayer(){
   const itemsList = $("#itemsList");
   const advantagesList = $("#advantagesList");
   const disadvantagesList = $("#disadvantagesList");
+  const sharedNotesEl = $("#sharedNotes");
 
   const attrSpans = {
     QI: $("#aQI"),
@@ -1034,6 +1088,8 @@ function initPlayer(){
   let uid = null;
   let assignedSheetId = null;
   let sheet = null;
+  let plNotesUnsub = null;
+  let plNotesLocalEditing = false;
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
   const selectedPassives = new Map();
@@ -1048,6 +1104,7 @@ function initPlayer(){
     if(advantagesList) advantagesList.innerHTML = "";
     if(disadvantagesList) disadvantagesList.innerHTML = "";
     if(rollOut) rollOut.textContent = "";
+    if(sharedNotesEl) sharedNotesEl.value = "";
   }
 
   function renderSheet(){
@@ -1065,6 +1122,7 @@ function initPlayer(){
     renderCategory(itemsList, "items", ensureObj(sheet?.items));
     renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
     renderCategory(disadvantagesList, "disadvantages", ensureObj(sheet?.disadvantages));
+    if(sharedNotesEl && !plNotesLocalEditing) sharedNotesEl.value = String(sheet?.sharedNotes || "");
   }
 
   function renderCategory(container, category, obj){
@@ -1312,6 +1370,8 @@ function initPlayer(){
       assignedSheetId = val?.sheetId || null;
 
       selectedPassives.clear();
+      if(plNotesUnsub){ try{ plNotesUnsub(); }catch(_){} plNotesUnsub = null; }
+      plNotesLocalEditing = false;
 
       if(!assignedSheetId){
         sheet = null;
@@ -1321,6 +1381,13 @@ function initPlayer(){
       }
 
       setStatus("Carregando ficha...", "warn");
+      // Shared notes live-sync
+      if(sharedNotesEl){
+        plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/sharedNotes`), (ns)=>{
+          if(plNotesLocalEditing) return;
+          sharedNotesEl.value = String(ns.val() || "");
+        }, "playerSharedNotes");
+      }
       onValueSafe(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}`), (s2) => {
         if(!s2.exists()){
           sheet = null;
@@ -1336,7 +1403,7 @@ function initPlayer(){
 
     $$(".btn.attr").forEach(btn => btn.addEventListener("click", () => rollAttribute(btn.dataset.attr)));
 
-    $$(".btn.die").forEach(btn => {
+$$(".btn.die").forEach(btn => {
       btn.addEventListener("click", () => {
         const n = Number(btn.dataset.die);
         if(!Number.isFinite(n) || n <= 1) return;
@@ -1344,6 +1411,25 @@ function initPlayer(){
         diceOut.textContent = `d${n} -> ${r}`;
       });
     });
+
+    if(sharedNotesEl){
+      const saveNotes = debounce(async ()=>{
+        if(!assignedSheetId) return;
+        try{
+          await set(ref(db, `rooms/${roomId}/sheets/${assignedSheetId}/sharedNotes`), String(sharedNotesEl.value || ""));
+          setStatus("Anotações salvas.", "ok");
+        }catch(e){
+          console.error(e);
+          setStatus(`Erro ao salvar anotações: ${e?.message || e}`, "err");
+        }
+      }, 500);
+
+      sharedNotesEl.addEventListener("input", ()=>{
+        plNotesLocalEditing = true;
+        saveNotes();
+      });
+      sharedNotesEl.addEventListener("blur", ()=>{ plNotesLocalEditing = false; });
+    }
   })().catch((e)=>{
     console.error(e);
     setStatus(`Erro: ${e?.message || e}`, "err");

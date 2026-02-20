@@ -1,26 +1,13 @@
-// Firebase init + exports ONLY (ES Modules via CDN)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
-  getAuth,
-  setPersistence,
-  browserLocalPersistence,
-  signInAnonymously,
-  signOut,
-  onAuthStateChanged
+  getAuth, setPersistence, browserLocalPersistence,
+  signInAnonymously, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-
 import {
-  getDatabase,
-  ref,
-  get,
-  set,
-  update,
-  onValue,
-  push,
-  serverTimestamp
+  getDatabase, ref, get, set, update, onValue, push, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
-export const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyBjSCYNOngXOSQGBU7jMj1kgf7hunfMjyI",
   authDomain: "marionetes-do-destino.firebaseapp.com",
   databaseURL: "https://marionetes-do-destino-default-rtdb.firebaseio.com",
@@ -31,21 +18,12 @@ export const firebaseConfig = {
   measurementId: "G-LQNNS93LDY"
 };
 
-export const app = initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getDatabase(app);
 
 export {
-  setPersistence,
-  browserLocalPersistence,
-  signInAnonymously,
-  signOut,
-  onAuthStateChanged,
-  ref,
-  get,
-  set,
-  update,
-  onValue,
-  push,
-  serverTimestamp
+  setPersistence, browserLocalPersistence,
+  signInAnonymously, signOut, onAuthStateChanged,
+  ref, get, set, update, onValue, push, serverTimestamp
 };
