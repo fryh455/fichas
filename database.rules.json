@@ -49,6 +49,18 @@
               ".write": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || data.parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())"
             }
           }
+        },
+        "rolls": {
+          "$rollId": {
+            ".read": "auth != null && auth.uid == data.parent().parent().child('meta/gmUid').val()",
+            ".write": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || newData.child('uid').val() == auth.uid)"
+          }
+        },
+        "rollsByPlayer": {
+          "$uid": {
+            ".read": "auth != null && (auth.uid == $uid || auth.uid == data.parent().parent().child('meta/gmUid').val())",
+            ".write": "auth != null && auth.uid == $uid"
+          }
         }
       }
     }

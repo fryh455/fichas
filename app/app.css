@@ -236,3 +236,59 @@ input::placeholder, textarea::placeholder{ color: rgba(233,240,255,.40); }
 .details{ background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.10); border-radius: 16px; padding: 10px 12px; }
 .details summary{ cursor:pointer; user-select:none; opacity: 0.9; }
 .small{ font-size: 12px; }
+
+
+/* Chrome-like tabs */
+.chromeBar{ display:flex; align-items:flex-end; gap:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.10); }
+.chromeTabs{ display:flex; gap:6px; flex-wrap:wrap; }
+.chromeTab{
+  appearance:none;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding: 8px 12px;
+  border-radius: 14px 14px 6px 6px;
+  cursor:pointer;
+  font-weight: 600;
+  opacity: 0.9;
+}
+.chromeTab.active{
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.22);
+  opacity: 1;
+}
+.chromeTab .sub{ font-weight:500; opacity:0.75; margin-left:8px; }
+
+/* Tabs */
+.tabsBar{ display:flex; gap:6px; flex-wrap:wrap; }
+.tabBtn{
+  appearance:none;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: inherit;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor:pointer;
+  font-weight: 650;
+  opacity: 0.85;
+}
+.tabBtn.active{ background: rgba(255,255,255,0.12); opacity: 1; border-color: rgba(255,255,255,0.22); }
+
+.tabPanel{ display:none; }
+.tabPanel.active{ display:block; }
+
+/* Toast */
+.toast{
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  max-width: 360px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(20,20,20,0.85);
+  border: 1px solid rgba(255,255,255,0.14);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+  white-space: pre-wrap;
+}

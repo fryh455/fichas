@@ -18,7 +18,16 @@
 
     <div id="status" class="status"></div>
 
-    <section class="grid2">
+    <div class="tabsBar mt12" id="gmTabs">
+      <button class="tabBtn active" data-tab="overview">Membros & Fichas</button>
+      <button class="tabBtn" data-tab="editor">Criar/Editar ficha</button>
+      <button class="tabBtn" data-tab="assign">Atribuições</button>
+      <button class="tabBtn" data-tab="import">Import</button>
+      <button class="tabBtn" data-tab="rolls">Rolagens</button>
+    </div>
+
+    <div class="tabPanel active" data-panel="overview">
+      <section class="grid2">
       <div class="card">
         <h2>Membros</h2>
         <div id="membersList" class="list"></div>
@@ -33,7 +42,8 @@
       </div>
     </section>
 
-    <section class="grid2">
+    <div class="tabPanel active" data-panel="overview">
+      <section class="grid2">
       <div class="card">
         <h2>Atribuir ficha</h2>
         <label>Player
@@ -120,6 +130,7 @@
 
       <hr />
 
+    <div class="tabPanel active" data-panel="overview">
       <section class="grid2">
         <div>
           <h3>Itens</h3>

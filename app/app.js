@@ -139,12 +139,12 @@ function computeDerivedStatsPlayer(attrs){
   const defBase = 6 + DEX;
   const invMax = (FOR + VIG) * 4;
 
-  const resHead = (VIG + 3) * 4 + 6;
-  const resTorso = (VIG + FOR + 3) * 4 + 6;
-  const resLimb = (VIG + 3) * 3 + 6;
-  const hpTotal = (resHead + resTorso + (resLimb * 4)) * 2;
+  const resHead = (VIG + 3) * 3 + 6;
+    const resTorso = (VIG + FOR + 3) * 3 + 6;
+    const resLimbs = (VIG + 3) * 2 + 6; // braços+pernas (valor único)
+    const hpTotal = (resHead + resTorso + resLimbs) * 2;
 
-  return { intentions, movePerInt, defBase, invMax, resHead, resTorso, resArm: resLimb, resLeg: resLimb, hpTotal };
+    return { intentions, movePerInt, defBase, invMax, resHead, resTorso, resArm: resLimbs, resLeg: resLimbs, hpTotal };
 }
 
 
@@ -165,6 +165,20 @@ function onValueSafe(r, cb, label=""){
 }
 
 
+
+function initTabs(barSel, panelSel){
+  const bar = document.querySelector(barSel);
+  if(!bar) return;
+  const btns = Array.from(bar.querySelectorAll("[data-tab]"));
+  const panels = Array.from(document.querySelectorAll(panelSel));
+  function activate(tab){
+    btns.forEach(b=> b.classList.toggle("active", b.dataset.tab === tab));
+    panels.forEach(p=> p.classList.toggle("active", p.dataset.panel === tab));
+  }
+  btns.forEach(b=> b.addEventListener("click", ()=> activate(b.dataset.tab)));
+  const first = btns.find(b=> b.classList.contains("active")) || btns[0];
+  if(first) activate(first.dataset.tab);
+}
 /** --------------------------
  * Routing by page
  * -------------------------- */
@@ -174,6 +188,7 @@ onAuthStateChanged(auth, () => { /* keep firebase warm */ });
 if(page === "index") initIndex();
 if(page === "gm") initGM();
 if(page === "player") initPlayer();
+
 
 /** --------------------------
  * index.html
@@ -263,8 +278,10 @@ function initGM(){
   });
 
   const roomCodeOut = $("#roomCodeOut");
+  initTabs("#sheetTabs", "body[data-page=player] .tabPanel");
   const membersList = $("#membersList");
   const sheetsList = $("#sheetsList");
+  const gmRollsList = $("#gmRollsList");
 
   const btnNewSheet = $("#btnNewSheet");
   const sheetForm = $("#sheetForm");
@@ -276,7 +293,10 @@ function initGM(){
   const attrVIG = $("#attrVIG");
   const mentalEl = $("#mental");
   const sharedNotesEl = $("#sharedNotes");
-  const sheetSelectEl = $("#sheetSelect");
+  const charTabsEl = $("#charTabs");
+  const rollsListEl = $("#rollsList");
+  const rollToastEl = $("#rollToast");
+  const rollBriefEl = $("#rollBrief");
   const avatarFileEl = $("#sheetAvatarFile");
   const avatarPreviewEl = $("#sheetAvatarPreview");
   const btnClearAvatar = $("#btnClearAvatar");
@@ -826,6 +846,14 @@ function initGM(){
     attrVIG.value = numOr0(s?.attributes?.VIG);
     mentalEl.value = intOr0(s?.mental);
 
+    // Rolagens live-sync (somente do player)
+    if(rollsUnsub){ try{ rollsUnsub(); }catch(_){} rollsUnsub = null; }
+    rollsUnsub = onValueSafe(ref(db, `rooms/${roomId}/rollsByPlayer/${uid}/${selectedSheetId}`), (rs)=>{
+      const obj = rs.val() || {};
+      rollsLocal = Object.values(obj);
+      renderRollsList();
+    }, "rollsByPlayer");
+
     // Shared notes live-sync
     if(sharedNotesEl){
       sharedNotesEl.value = String(s?.sharedNotes || "");
@@ -1216,6 +1244,7 @@ function initPlayer(){
   const roomId = mustRoomId();
 
   const roomCodeOut = $("#roomCodeOut");
+  initTabs("#sheetTabs", "body[data-page=player] .tabPanel");
   const uidOut = $("#uidOut");
   $("#btnSignOut")?.addEventListener("click", async () => {
     await signOut(auth);
@@ -1251,7 +1280,10 @@ function initPlayer(){
   const advantagesList = $("#advantagesList");
   const disadvantagesList = $("#disadvantagesList");
   const sharedNotesEl = $("#sharedNotes");
-  const sheetSelectEl = $("#sheetSelect");
+  const charTabsEl = $("#charTabs");
+  const rollsListEl = $("#rollsList");
+  const rollToastEl = $("#rollToast");
+  const rollBriefEl = $("#rollBrief");
 
   const attrSpans = {
     QI: $("#aQI"),
@@ -1265,10 +1297,75 @@ function initPlayer(){
   let selectedSheetId = null;
   let sheet = null;
   let plNotesUnsub = null;
+  let rollsUnsub = null;
+  let rollsLocal = [];
   let plNotesLocalEditing = false;
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
   const selectedPassives = new Map();
+
+  function showToast(text){
+    if(!rollToastEl) return;
+    rollToastEl.textContent = text;
+    rollToastEl.style.display = "block";
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=>{ rollToastEl.style.display = "none"; }, 2200);
+  }
+
+  function renderCharTabs(){
+    if(!charTabsEl) return;
+    charTabsEl.innerHTML = "";
+    if(selectedSheetIds.length <= 1){
+      // hide tabs if only 1
+      charTabsEl.parentElement && (charTabsEl.parentElement.style.display = "none");
+      return;
+    }
+    charTabsEl.parentElement && (charTabsEl.parentElement.style.display = "");
+    selectedSheetIds.forEach((sid)=>{
+      const name = (sheetsCache[sid]?.name) ? sheetsCache[sid].name : sid;
+      const btn = document.createElement("button");
+      btn.className = "chromeTab" + (sid === selectedSheetId ? " active" : "");
+      btn.type = "button";
+      btn.textContent = name;
+      btn.addEventListener("click", ()=>{
+        selectSheet(sid);
+      });
+      charTabsEl.appendChild(btn);
+    });
+  }
+
+  function selectSheet(sid){
+    if(!sid) return;
+    selectedSheetId = sid;
+    // reset local passives & notes sync flags
+    selectedPassives.clear();
+    plNotesLocalEditing = false;
+    loadSelectedSheet();
+    renderCharTabs();
+  }
+
+  function renderRollsList(){
+    if(!rollsListEl) return;
+    rollsListEl.innerHTML = "";
+    if(!rollsLocal || rollsLocal.length === 0){
+      rollsListEl.innerHTML = '<div class="muted">(sem rolagens)</div>';
+      return;
+    }
+    const list = rollsLocal.slice().sort((a,b)=> (b.ts||0)-(a.ts||0)).slice(0,250);
+    list.forEach(r=>{
+      const div = document.createElement("div");
+      div.className = "item";
+      const when = r.ts ? new Date(r.ts).toLocaleString() : "";
+      div.innerHTML = `<div class="meta">
+        <div class="title">${escapeHtml(r.title || "Rolagem")}</div>
+        <div class="sub">${escapeHtml(when)} • total: <strong>${escapeHtml(String(r.total))}</strong></div>
+      </div>`;
+      rollsListEl.appendChild(div);
+    });
+  }
+
+  const sheetsCache = {}; // sheetId -> sheet snapshot (name/avatar/etc for tabs)
+
 
 
   function loadSelectedSheet(){
@@ -1278,6 +1375,14 @@ function initPlayer(){
       return;
     }
     setStatus("Carregando ficha...", "warn");
+
+    // Rolagens live-sync (somente do player)
+    if(rollsUnsub){ try{ rollsUnsub(); }catch(_){} rollsUnsub = null; }
+    rollsUnsub = onValueSafe(ref(db, `rooms/${roomId}/rollsByPlayer/${uid}/${selectedSheetId}`), (rs)=>{
+      const obj = rs.val() || {};
+      rollsLocal = Object.values(obj);
+      renderRollsList();
+    }, "rollsByPlayer");
 
     // Shared notes live-sync
     if(sharedNotesEl){
@@ -1311,12 +1416,12 @@ function initPlayer(){
     const defBase = 6 + DEX;
     const invMax = (FOR + VIG) * 4;
 
-    const resHead = (VIG + 3) * 4 + 6;
-    const resTorso = (VIG + FOR + 3) * 4 + 6;
-    const resLimb = (VIG + 3) * 3 + 6;
-    const hpTotal = (resHead + resTorso + (resLimb * 4)) * 2;
+    const resHead = (VIG + 3) * 3 + 6;
+    const resTorso = (VIG + FOR + 3) * 3 + 6;
+    const resLimbs = (VIG + 3) * 2 + 6; // braços+pernas (valor único)
+    const hpTotal = (resHead + resTorso + resLimbs) * 2;
 
-    return { intentions, movePerInt, defBase, invMax, resHead, resTorso, resArm: resLimb, resLeg: resLimb, hpTotal };
+    return { intentions, movePerInt, defBase, invMax, resHead, resTorso, resArm: resLimbs, resLeg: resLimbs, hpTotal };
   }
 
   function renderEmpty(){
@@ -1551,14 +1656,32 @@ function initPlayer(){
     lines.push("");
     lines.push(`total: ${totalFinal}`);
 
-    rollOut.textContent = lines.join("\n");
+    const full = lines.join("\n");
+    // brief + toast
+    const brief = `${title} • d12:${d12} • total:${totalFinal}`;
+    if(rollBriefEl) rollBriefEl.textContent = brief;
+    showToast(brief);
+
+    // persist roll (player-specific + global)
+    try{
+      const ts = Date.now();
+      const rollId = push(ref(db, `rooms/${roomId}/rolls`)).key;
+      const payload = { uid, sheetId: selectedSheetId, title, total: totalFinal, ts };
+      const updates = {};
+      updates[`rooms/${roomId}/rolls/${rollId}`] = payload;
+      updates[`rooms/${roomId}/rollsByPlayer/${uid}/${selectedSheetId}/${rollId}`] = payload;
+      await update(ref(db), updates);
+    }catch(e){
+      console.warn("roll save failed", e);
+    }
+
   }
 
-  function rollAttribute(attrKey){
+  async function rollAttribute(attrKey){
     if(!sheet) return;
     const attrs = sheet.attributes || {};
     const attrVal = asNum(attrs[attrKey], 0);
-    rollCore({
+    await rollCore({
       title: `Rolagem: ${attrKey}`,
       rollAttrKey: attrKey,
       baseAttrValue: attrVal,
@@ -1567,7 +1690,7 @@ function initPlayer(){
     });
   }
 
-  function rollActive({ category, id, entry }){
+  async function rollActive({ category, id, entry }){
     const attrs = sheet?.attributes || {};
     const baseAttrKey = entry.atributoBase || null;
     const baseAttrValue = baseAttrKey ? asNum(attrs[baseAttrKey], 0) : 0;
@@ -1577,7 +1700,7 @@ function initPlayer(){
       value: entry.modMode === "NONE" ? 0 : (Number(entry.modValue) || 0)
     };
 
-    rollCore({
+    await rollCore({
       title: `Rolagem: ${entry.name}`,
       rollAttrKey: baseAttrKey, // pode ser null
       baseAttrValue,
@@ -1608,9 +1731,31 @@ function initPlayer(){
     roomCodeOut.textContent = meta.code || "?";
 
     setStatus("Carregando atribuição...", "warn");
-    onValueSafe(ref(db, `rooms/${roomId}/assignments/${uid}`), (snap) => {
-      const val = snap.val();
-      selectedSheetId = val?.sheetId || null;
+    onValueSafe(ref(db, `rooms/${roomId}/assignmentsByPlayer/${uid}`), async (snap) => {
+      const obj = snap.val() || {};
+      selectedSheetIds = Object.keys(obj).filter(k => !!obj[k]);
+
+      // limpar seleção se não existe mais
+      if(selectedSheetId && !selectedSheetIds.includes(selectedSheetId)){
+        selectedSheetId = null;
+      }
+
+      // auto-selecionar
+      if(!selectedSheetId && selectedSheetIds.length > 0){
+        selectedSheetId = selectedSheetIds[0];
+      }
+
+      // pré-carregar nomes (best-effort) para tabs
+      for(const sid of selectedSheetIds){
+        if(!sheetsCache[sid]){
+          try{
+            const sSnap = await get(ref(db, `rooms/${roomId}/sheets/${sid}`));
+            if(sSnap.exists()) sheetsCache[sid] = sSnap.val();
+          }catch(_){}
+        }
+      }
+
+      renderCharTabs();
 
       selectedPassives.clear();
       if(plNotesUnsub){ try{ plNotesUnsub(); }catch(_){} plNotesUnsub = null; }
@@ -1619,38 +1764,12 @@ function initPlayer(){
       if(!selectedSheetId){
         sheet = null;
         renderEmpty();
-        setStatus("Sem ficha atribuída. Peça ao GM para atribuir.", "warn");
+        setStatus("Sem fichas atribuídas. Peça ao GM para atribuir.", "warn");
         return;
       }
 
-      setStatus("Carregando ficha...", "warn");
-      // Shared notes live-sync
-      if(sharedNotesEl){
-        plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/sharedNotes`), (ns)=>{
-          if(plNotesLocalEditing) return;
-          sharedNotesEl.value = String(ns.val() || "");
-        }, "playerSharedNotes");
-      }
-      onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}`), (s2) => {
-        if(!s2.exists()){
-          sheet = null;
-          renderEmpty();
-          setStatus("Ficha atribuída não existe mais.", "err");
-          return;
-        }
-        sheet = s2.val();
-        renderSheet();
-        setStatus("OK.", "ok");
-    }, "assignment");
-    }, "sheet");
-
-    $$(".btn.attr").forEach(btn => btn.addEventListener("click", () => rollAttribute(btn.dataset.attr)));
-
-    sheetSelectEl?.addEventListener("change", ()=>{
-      selectedSheetId = sheetSelectEl.value || null;
-      selectedPassives.clear();
       loadSelectedSheet();
-    });
+    }, "assignmentsByPlayer");
 
 $$(".btn.die").forEach(btn => {
       btn.addEventListener("click", () => {
