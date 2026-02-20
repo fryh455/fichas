@@ -57,3 +57,10 @@ textarea{ resize:vertical; }
   border-color: rgba(255,255,255,0.22);
   opacity: 1;
 }
+
+
+/* STRICT: only active panel visible */
+body[data-page="gm"] .tabPanel{ display:none !important; }
+body[data-page="gm"] .tabPanel.active{ display:block !important; }
+body[data-page="player"] .tabPanel{ display:none !important; }
+body[data-page="player"] .tabPanel.active{ display:block !important; }
