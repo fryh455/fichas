@@ -129,6 +129,25 @@ function debounce(fn, ms){
   };
 }
 
+function computeDerivedStatsPlayer(attrs){
+  const FOR = asNum(attrs?.FOR, 0);
+  const DEX = asNum(attrs?.DEX, 0);
+  const VIG = asNum(attrs?.VIG, 0);
+
+  const intentions = 1 + Math.floor((VIG + DEX) / 2);
+  const movePerInt = DEX + 2;
+  const defBase = 6 + DEX;
+  const invMax = (FOR + VIG) * 4;
+
+  const resHead = (VIG + 3) * 4 + 6;
+  const resTorso = (VIG + FOR + 3) * 4 + 6;
+  const resLimb = (VIG + 3) * 3 + 6;
+  const hpTotal = (resHead + resTorso + (resLimb * 4)) * 2;
+
+  return { intentions, movePerInt, defBase, invMax, resHead, resTorso, resArm: resLimb, resLeg: resLimb, hpTotal };
+}
+
+
 function linkifyRole(role){
   return role === "GM" ? "GM" : "PLAYER";
 }
@@ -1329,6 +1348,19 @@ function initPlayer(){
     if(attrSpans.FOR) attrSpans.FOR.textContent = String(asNum(attrs.FOR, 0));
     if(attrSpans.DEX) attrSpans.DEX.textContent = String(asNum(attrs.DEX, 0));
     if(attrSpans.VIG) attrSpans.VIG.textContent = String(asNum(attrs.VIG, 0));
+    // Derived status
+    const d = computeDerivedStatsPlayer(attrs);
+    if(statIntentionsEl) statIntentionsEl.textContent = String(d.intentions);
+    if(statMoveEl) statMoveEl.textContent = String(d.movePerInt);
+    if(statDefEl) statDefEl.textContent = String(d.defBase);
+    if(statInvMaxEl) statInvMaxEl.textContent = String(d.invMax);
+    if(hpTotalOutEl) hpTotalOutEl.textContent = String(d.hpTotal);
+    if(resHeadEl) resHeadEl.textContent = String(d.resHead);
+    if(resTorsoEl) resTorsoEl.textContent = String(d.resTorso);
+    if(resArmEl) resArmEl.textContent = String(d.resArm);
+    if(resLegEl) resLegEl.textContent = String(d.resLeg);
+
+
 
     renderCategory(itemsList, "items", ensureObj(sheet?.items));
     renderCategory(advantagesList, "advantages", ensureObj(sheet?.advantages));
