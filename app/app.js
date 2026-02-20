@@ -1138,23 +1138,37 @@ function initPlayer(){
     return { diceBonus };
   }
 
-  function getSelectedPassiveMods(){
+  function getSelectedPassiveMods(rollAttrKey){
     let soma = 0;
     let mult = 0;
+    const appliedSoma = []; // {name,value}
+    const appliedMult = []; // {name,value}
     for(const p of selectedPassives.values()){
+      // Regra: PASSIVA só aplica no atributo dela.
+      // - Se p.atributoBase == null: aplica APENAS quando a rolagem não tem atributo (rollAttrKey null).
+      // - Se p.atributoBase != null: aplica só quando bate com o atributo da rolagem.
+      const ok = (p.atributoBase == null) ? (rollAttrKey == null) : (p.atributoBase === rollAttrKey);
+      if(!ok) continue;
+
       if(p.modMode === "SOMA"){
         const v = Number(p.modValue) || 0;
-        soma += v;
+        if(v !== 0){
+          soma += v;
+          appliedSoma.push({ name: p.name, value: v });
+        }
       }else if(p.modMode === "MULT"){
         const v = Number(p.modValue) || 0;
-        mult += v;
+        if(v !== 0){
+          mult += v;
+          appliedMult.push({ name: p.name, value: v });
+        }
       }
     }
-    return { soma, mult };
+    return { soma, mult, appliedSoma, appliedMult };
   }
 
   // Output: somente d12 e modificadores != 0 + total
-  function rollCore({ title, baseAttrValue, activeMod }){
+  function rollCore({ title, rollAttrKey, baseAttrValue, activeMod, activeName }){
     if(!sheet){
       setStatus("Sem ficha carregada.", "err");
       return;
@@ -1165,7 +1179,7 @@ function initPlayer(){
 
     const d12 = buildDice(12);
 
-    const pass = getSelectedPassiveMods();
+    const pass = getSelectedPassiveMods(rollAttrKey);
     const somaPass = pass.soma;
     const multPass = pass.mult;
 
@@ -1191,15 +1205,40 @@ function initPlayer(){
     lines.push("");
     lines.push(`d12: ${d12}`);
 
-    if(diceBonus !== 0) lines.push(`diceBonus: ${diceBonus}`);
-    if(baseAttrValue !== 0) lines.push(`atributo: ${baseAttrValue}`);
-    if(somaPass !== 0) lines.push(`passivas(SOMA): ${somaPass}`);
-    if(somaAtiva !== 0) lines.push(`ativa(SOMA): ${somaAtiva}`);
-    if(hasMult) lines.push(`mult: ${multValue}`);
+    // SOMAS com origem
+    if(diceBonus !== 0) lines.push(`${diceBonus >= 0 ? "+" : ""}${diceBonus} (mental)`);
+    if(baseAttrValue !== 0){
+      const label = rollAttrKey ? `atributo ${rollAttrKey}` : "atributo";
+      lines.push(`${baseAttrValue >= 0 ? "+" : ""}${baseAttrValue} (${label})`);
+    }
+
+    for(const a of pass.appliedSoma){
+      lines.push(`${a.value >= 0 ? "+" : ""}${a.value} (passiva: ${a.name})`);
+    }
+
+    if(somaAtiva !== 0){
+      lines.push(`${somaAtiva >= 0 ? "+" : ""}${somaAtiva} (ativa: ${activeName || "ação"})`);
+    }
+
+    // MULT com origem (só mostra se existir)
+    if(hasMult){
+      // lista mult passivas
+      for(const a of pass.appliedMult){
+        lines.push(`${a.value >= 0 ? "+" : ""}${a.value} (mult passiva: ${a.name})`);
+      }
+      if(multAtiva !== 0){
+        lines.push(`${multAtiva >= 0 ? "+" : ""}${multAtiva} (mult ativa: ${activeName || "ação"})`);
+      }
+      lines.push(`mult total: ${multValue}`);
+    }
+
     if(isCrit) lines.push(`crítico: SIM`);
 
+    lines.push("");
     lines.push(`total: ${totalFinal}`);
-    rollOut.textContent = lines.join("\n");
+
+    rollOut.textContent = lines.join("
+");
   }
 
   function rollAttribute(attrKey){
@@ -1208,8 +1247,10 @@ function initPlayer(){
     const attrVal = asNum(attrs[attrKey], 0);
     rollCore({
       title: `Rolagem: ${attrKey}`,
+      rollAttrKey: attrKey,
       baseAttrValue: attrVal,
-      activeMod: null
+      activeMod: null,
+      activeName: null
     });
   }
 
@@ -1225,8 +1266,10 @@ function initPlayer(){
 
     rollCore({
       title: `Rolagem: ${entry.name}`,
+      rollAttrKey: baseAttrKey, // pode ser null
       baseAttrValue,
       activeMod,
+      activeName: entry.name
     });
   }
 
