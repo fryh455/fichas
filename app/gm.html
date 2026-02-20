@@ -91,6 +91,20 @@
           <input id="mental" type="number" step="1" />
         </label>
 
+        <div class="profileRow">
+          <div class="avatarBox"><img id="sheetAvatarPreview" alt="avatar" /></div>
+          <div class="avatarActions">
+            <div class="pill">Imagem de perfil (base64) • salva na ficha</div>
+            <label>Selecionar imagem
+              <input id="sheetAvatarFile" type="file" accept="image/*" />
+            </label>
+            <div class="row">
+              <button id="btnClearAvatar" type="button" class="btn small ghost">Remover imagem</button>
+            </div>
+            <div class="muted mt8">A imagem é redimensionada automaticamente para reduzir tamanho no banco.</div>
+          </div>
+        </div>
+
         <label>Anotações compartilhadas (GM + Player)
           <textarea id="sharedNotes" rows="6" spellcheck="false" placeholder="Anotações da ficha..."></textarea>
         </label>

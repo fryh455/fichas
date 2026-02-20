@@ -65,6 +65,44 @@ function parseJsonLenient(text){
 
 function buildDice(n){ return 1 + Math.floor(Math.random() * n); }
 
+
+async function fileToDataUrl(file){
+  const buf = await file.arrayBuffer();
+  const blob = new Blob([buf], { type: file.type || "application/octet-stream" });
+  return await new Promise((resolve, reject)=>{
+    const fr = new FileReader();
+    fr.onload = ()=> resolve(String(fr.result || ""));
+    fr.onerror = ()=> reject(fr.error || new Error("FileReader error"));
+    fr.readAsDataURL(blob);
+  });
+}
+
+// Redimensiona para quadrado (ex: 256x256) e retorna dataURL JPEG
+async function resizeImageDataUrl(dataUrl, size=256, quality=0.82){
+  return await new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        // crop central para preencher quadrado
+        const iw = img.naturalWidth || img.width;
+        const ih = img.naturalHeight || img.height;
+        const s = Math.min(iw, ih);
+        const sx = Math.floor((iw - s) / 2);
+        const sy = Math.floor((ih - s) / 2);
+        ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
+        const out = canvas.toDataURL("image/jpeg", quality);
+        resolve(out);
+      }catch(e){ reject(e); }
+    };
+    img.onerror = ()=> reject(new Error("Imagem inválida"));
+    img.src = dataUrl;
+  });
+}
+
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
@@ -219,6 +257,9 @@ function initGM(){
   const attrVIG = $("#attrVIG");
   const mentalEl = $("#mental");
   const sharedNotesEl = $("#sharedNotes");
+  const avatarFileEl = $("#sheetAvatarFile");
+  const avatarPreviewEl = $("#sheetAvatarPreview");
+  const btnClearAvatar = $("#btnClearAvatar");
   const btnDeleteSheet = $("#btnDeleteSheet");
 
   const assignPlayer = $("#assignPlayer");
@@ -272,6 +313,7 @@ function initGM(){
   let members = {};
   let sheets = {};
   let currentSheetId = null; // slug
+  let currentAvatarDataUrl = "";
   let gmNotesUnsub = null;
   let gmNotesLocalEditing = false;
   let currentSheetDraft = null; // {items,advantages,disadvantages}
@@ -516,6 +558,32 @@ function initGM(){
     sharedNotesEl.addEventListener("blur", ()=>{ gmNotesLocalEditing = false; });
   }
 
+  if(avatarFileEl){
+    avatarFileEl.addEventListener("change", async ()=>{
+      const f = avatarFileEl.files?.[0];
+      if(!f) return;
+      try{
+        setStatus("Processando imagem...", "warn");
+        const dataUrl = await fileToDataUrl(f);
+        const resized = await resizeImageDataUrl(dataUrl, 256, 0.82);
+        currentAvatarDataUrl = resized;
+        if(avatarPreviewEl) avatarPreviewEl.src = currentAvatarDataUrl;
+        setStatus("Imagem pronta. Salve a ficha para persistir.", "ok");
+      }catch(e){
+        console.error(e);
+        setStatus(`Erro na imagem: ${e?.message || e}`, "err");
+      }
+    });
+  }
+  if(btnClearAvatar){
+    btnClearAvatar.addEventListener("click", ()=>{
+      currentAvatarDataUrl = "";
+      if(avatarPreviewEl) avatarPreviewEl.src = "";
+      if(avatarFileEl) avatarFileEl.value = "";
+      setStatus("Imagem removida do draft. Salve a ficha para persistir.", "ok");
+    });
+  }
+
   // ---- Sheets ----
   function numOr0(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
   function intOr0(v){ const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : 0; }
@@ -628,6 +696,10 @@ function initGM(){
     attrVIG.value = 0;
     mentalEl.value = 0;
     if(sharedNotesEl) sharedNotesEl.value = "";
+    if(avatarViewEl) avatarViewEl.src = "";
+    currentAvatarDataUrl = "";
+    if(avatarPreviewEl) avatarPreviewEl.src = "";
+    if(avatarFileEl) avatarFileEl.value = "";
     if(gmNotesUnsub){ try{ gmNotesUnsub(); }catch(_){} gmNotesUnsub = null; }
     $("#sheetFormTitle") && ($("#sheetFormTitle").textContent = "Criar");
     currentSheetId = null;
@@ -681,6 +753,8 @@ function initGM(){
     // Shared notes live-sync
     if(sharedNotesEl){
       sharedNotesEl.value = String(s?.sharedNotes || "");
+      currentAvatarDataUrl = String(s?.profileImage || "");
+      if(avatarPreviewEl) avatarPreviewEl.src = currentAvatarDataUrl;
       gmNotesLocalEditing = false;
       if(gmNotesUnsub) { try{ gmNotesUnsub(); }catch(_){} }
       gmNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${id}/sharedNotes`), (ns)=>{
@@ -750,6 +824,7 @@ function initGM(){
         },
         mental: asInt(mentalEl.value, 0),
         sharedNotes: sharedNotesEl ? String(sharedNotesEl.value || "") : (sheets[oldId]?.sharedNotes || ""),
+        profileImage: String(currentAvatarDataUrl || ""),
         items: ensureObj(currentSheetDraft?.items),
         advantages: ensureObj(currentSheetDraft?.advantages),
         disadvantages: ensureObj(currentSheetDraft?.disadvantages),
@@ -860,6 +935,8 @@ function initGM(){
           name: entry.name,
           attributes: entry.attributes,
           mental: entry.mental,
+          sharedNotes: String(entry.sharedNotes || ""),
+          profileImage: String(entry.profileImage || ""),
           items: arrayToObject(entry.items),
           advantages: arrayToObject(entry.advantages),
           disadvantages: arrayToObject(entry.disadvantages),
@@ -1072,6 +1149,7 @@ function initPlayer(){
   const mentalOut = $("#mentalOut");
   const rollOut = $("#rollOut");
   const diceOut = $("#diceOut");
+  const avatarViewEl = $("#sheetAvatarView");
 
   const itemsList = $("#itemsList");
   const advantagesList = $("#advantagesList");
@@ -1105,6 +1183,10 @@ function initPlayer(){
     if(disadvantagesList) disadvantagesList.innerHTML = "";
     if(rollOut) rollOut.textContent = "";
     if(sharedNotesEl) sharedNotesEl.value = "";
+    if(avatarViewEl) avatarViewEl.src = "";
+    currentAvatarDataUrl = "";
+    if(avatarPreviewEl) avatarPreviewEl.src = "";
+    if(avatarFileEl) avatarFileEl.value = "";
   }
 
   function renderSheet(){
@@ -1112,6 +1194,7 @@ function initPlayer(){
     const m = asInt(sheet?.mental, 0);
     const attrs = sheet?.attributes || {};
     if(charName) charName.textContent = name;
+    if(avatarViewEl) avatarViewEl.src = String(sheet?.profileImage || "");
     if(mentalOut) mentalOut.textContent = String(m);
 
     if(attrSpans.QI) attrSpans.QI.textContent = String(asNum(attrs.QI, 0));
