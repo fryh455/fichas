@@ -351,6 +351,7 @@ function initGM(){
   const assignPlayer = $("#assignPlayer");
   const assignSheet = $("#assignSheet");
   const btnAssign = $("#btnAssign");
+  const btnUnassign = $("#btnUnassign");
 
   const importText = $("#importText");
   const importFile = $("#importFile");
@@ -1009,6 +1010,47 @@ function initGM(){
     }catch(e){
       console.error(e);
       setStatus(`Erro ao atribuir: ${e?.message || e}`, "err");
+    }
+  });
+
+
+  btnUnassign?.addEventListener("click", async () => {
+    try{
+      const playerUid = assignPlayer.value;
+      const sheetId = assignSheet.value;
+      if(!playerUid) return setStatus("Selecione um player.", "err");
+      if(!sheetId) return setStatus("Selecione uma ficha.", "err");
+
+      const aRef = ref(db, `rooms/${roomId}/assignments/${playerUid}`);
+      const aSnap = await get(aRef);
+      const cur = aSnap.val() || {};
+
+      const sheetIds = ensureObj(cur.sheetIds);
+
+      // migração do formato antigo
+      const legacy = (typeof cur.sheetId === "string" && cur.sheetId.trim()) ? cur.sheetId.trim() : null;
+      if(legacy) sheetIds[legacy] = true;
+
+      // remover
+      delete sheetIds[sheetId];
+      const remaining = Object.keys(sheetIds).filter(k => sheetIds[k] === true || sheetIds[k] === 1 || sheetIds[k] === "true");
+
+      // ajustar primária
+      const curPrimary = (typeof cur.primarySheetId === "string" && cur.primarySheetId.trim()) ? cur.primarySheetId.trim() : null;
+      const nextPrimary = (curPrimary === sheetId) ? (remaining[0] || null) : (curPrimary || remaining[0] || null);
+
+      if(remaining.length === 0){
+        await set(aRef, null);
+        setStatus("Atribuição removida (player ficou sem fichas).", "ok");
+        return;
+      }
+
+      await set(aRef, { sheetIds, primarySheetId: nextPrimary });
+
+      setStatus("Ficha removida do player.", "ok");
+    }catch(e){
+      console.error(e);
+      setStatus(`Erro ao remover: ${e?.message || e}`, "err");
     }
   });
 
