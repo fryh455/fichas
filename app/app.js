@@ -810,10 +810,15 @@ function initGM(){
     // Shared notes live-sync
     if(sharedNotesEl){
       if(hpUnsub){ try{ hpUnsub(); }catch(_){} hpUnsub = null; }
+      if(invUnsub){ try{ invUnsub(); }catch(_){} invUnsub = null; }
       hpUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/hpCurrent`), (hs)=>{
         const v = hs.val();
         if(hpCurrentInEl) hpCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
       }, "hpCurrent");
+      invUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/invCurrent`), (is)=>{
+        const v = is.val();
+        if(invCurrentInEl) invCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
+      }, "invCurrent");
       sharedNotesEl.value = String(s?.sharedNotes || "");
       currentAvatarDataUrl = String(s?.profileImage || "");
       if(avatarPreviewEl) avatarPreviewEl.src = currentAvatarDataUrl;
@@ -1212,6 +1217,25 @@ function initPlayer(){
   const mentalOut = $("#mentalOut");
   const rollOut = $("#rollOut");
   const diceOut = $("#diceOut");
+
+  // Derived stats + HP/Inventory
+  const statIntentionsEl = $("#statIntentions");
+  const statMoveEl = $("#statMove");
+  const statDefEl = $("#statDef");
+  const statInvMaxEl = $("#statInvMax");
+  const hpTotalOutEl = $("#hpTotalOut");
+  const hpCurrentInEl = $("#hpCurrentIn");
+  const hpMinusBtn = $("#hpMinus");
+  const hpPlusBtn = $("#hpPlus");
+  const hpSaveBtn = $("#hpSave");
+  const invCurrentInEl = $("#invCurrentIn");
+  const invMinusBtn = $("#invMinus");
+  const invPlusBtn = $("#invPlus");
+  const invSaveBtn = $("#invSave");
+  const resHeadEl = $("#resHead");
+  const resTorsoEl = $("#resTorso");
+  const resArmEl = $("#resArm");
+  const resLegEl = $("#resLeg");
   const avatarViewEl = $("#sheetAvatarView");
 
   const itemsList = $("#itemsList");
@@ -1233,6 +1257,7 @@ function initPlayer(){
   let sheet = null;
   let plNotesUnsub = null;
   let hpUnsub = null;
+  let invUnsub = null;
   let plNotesLocalEditing = false;
 
   // local selected passives map: key -> { category, id, name, modMode, modValue, atributoBase }
@@ -1250,10 +1275,15 @@ function initPlayer(){
     // Shared notes live-sync
     if(sharedNotesEl){
       if(hpUnsub){ try{ hpUnsub(); }catch(_){} hpUnsub = null; }
+      if(invUnsub){ try{ invUnsub(); }catch(_){} invUnsub = null; }
       hpUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/hpCurrent`), (hs)=>{
         const v = hs.val();
         if(hpCurrentInEl) hpCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
       }, "hpCurrent");
+      invUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/invCurrent`), (is)=>{
+        const v = is.val();
+        if(invCurrentInEl) invCurrentInEl.value = (v === null || v === undefined || v === "") ? "" : String(v);
+      }, "invCurrent");
       if(plNotesUnsub){ try{ plNotesUnsub(); }catch(_){} plNotesUnsub = null; }
       plNotesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${selectedSheetId}/sharedNotes`), (ns)=>{
         if(plNotesLocalEditing) return;

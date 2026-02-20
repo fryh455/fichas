@@ -218,21 +218,3 @@ input::placeholder, textarea::placeholder{ color: rgba(233,240,255,.40); }
   color: var(--muted);
   font-size: 12px;
 }
-
-
-/* Derived stats + HP */
-.grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-.statCard{
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 16px;
-  padding: 12px;
-}
-.statLabel{ font-size: 12px; opacity: 0.8; }
-.statValue{ font-size: 22px; font-weight: 700; margin-top: 4px; }
-.hpRow{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-.hpCurrentRow{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-#hpCurrentIn{ width: 120px; }
-.details{ background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.10); border-radius: 16px; padding: 10px 12px; }
-.details summary{ cursor:pointer; user-select:none; opacity: 0.9; }
-.small{ font-size: 12px; }

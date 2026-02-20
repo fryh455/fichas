@@ -41,8 +41,12 @@
               ".write": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())"
             },
             "hpCurrent": {
-              ".read": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())",
-              ".write": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())"
+              ".read": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || data.parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())",
+              ".write": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || data.parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())"
+            },
+            "invCurrent": {
+              ".read": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || data.parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())",
+              ".write": "auth != null && (auth.uid == data.parent().parent().child('meta/gmUid').val() || data.parent().parent().child('playersBySheet/'+$sheetId+'/'+auth.uid).exists())"
             }
           }
         }
