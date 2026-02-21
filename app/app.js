@@ -3,7 +3,7 @@ import {
   setPersistence, browserLocalPersistence,
   signInAnonymously, signOut, onAuthStateChanged,
   ref, get, set, update, onValue, push, serverTimestamp,
-  query, orderByChild, limitToLast
+  query, orderByChild, limitToLast, remove
 } from "./firebase.js";
 
 /** --------------------------
@@ -32,6 +32,36 @@ function toast(msg, type="ok", ms=1200){
       setTimeout(()=> div.remove(), 220);
     }, ms);
   }catch(_){}
+}
+
+function setupTabs(tabsSelector, panesSelector, storageKey, defaultTab){
+  const tabsRoot = $(tabsSelector);
+  if(!tabsRoot){
+    return { activate: ()=>{} };
+  }
+  const tabs = Array.from(tabsRoot.querySelectorAll(".tab[data-tab]"));
+  const panes = $$(panesSelector);
+
+  const activate = (tabId, opts={}) => {
+    const { persist=true } = opts || {};
+    const id = tabId || defaultTab || tabs[0]?.dataset?.tab;
+    if(!id) return;
+    tabs.forEach(t => t.classList.toggle("active", t.dataset.tab === id));
+    panes.forEach(p => p.classList.toggle("hidden", p.dataset.pane !== id));
+    if(persist && storageKey){
+      try{ localStorage.setItem(storageKey, id); }catch(_){}
+    }
+  };
+
+  tabs.forEach(t => t.addEventListener("click", () => activate(t.dataset.tab)));
+
+  let initial = defaultTab || tabs[0]?.dataset?.tab;
+  if(storageKey){
+    try{ initial = localStorage.getItem(storageKey) || initial; }catch(_){}
+  }
+  activate(initial, { persist:false });
+
+  return { activate };
 }
 
 function mustRoomId(){
@@ -351,6 +381,8 @@ function initGM(){
     location.href = "../index.html";
   });
 
+  const gmTabs = setupTabs("#gmMainTabs", ".tabpane[data-pane]", "ui_gm_tab", "mesa");
+
   const roomCodeOut = $("#roomCodeOut");
   const gmKeyOut = $("#gmKeyOut");
   const btnCopyGmKey = $("#btnCopyGmKey");
@@ -413,10 +445,12 @@ function initGM(){
   function openEditor(){
     sheetEditorPane?.classList.remove("hidden");
     sheetEditorEmpty?.classList.add("hidden");
+    gmTabs?.activate("editor");
   }
   function closeEditor(){
     sheetEditorPane?.classList.add("hidden");
     sheetEditorEmpty?.classList.remove("hidden");
+    gmTabs?.activate("mesa");
   }
 
   // State
@@ -1613,6 +1647,8 @@ function initPlayer(){
     location.href = "../index.html";
   });
 
+  const playerTabs = setupTabs("#playerMainTabs", ".tabpane[data-pane]", "ui_player_tab", "resume");
+
   const sheetTabsEl = $("#sheetTabs");
 
   const charName = $("#charName");
@@ -2216,6 +2252,7 @@ function initPlayer(){
     lines.push(`total: ${totalFinal}`);
 
     rollOut.textContent = lines.join("\n");
+    playerTabs?.activate("rolagem");
 
     // log pro GM (total imediato + detalhes ao revelar)
     writeRollLog({ title: title || "Rolagem", total: totalFinal, details }).catch(()=>{});
@@ -2319,6 +2356,7 @@ function initPlayer(){
         if(!Number.isFinite(n) || n <= 1) return;
         const r = buildDice(n);
         diceOut.textContent = `d${n} -> ${r}`;
+    playerTabs?.activate("rolagem");
       });
     });
 

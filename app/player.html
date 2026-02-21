@@ -1,108 +1,94 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Player • Ficha</title>
-  <link rel="stylesheet" href="./app.css" />
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Player • Ficha</title>
+<link href="./app.css" rel="stylesheet"/>
 </head>
 <body data-page="player">
-  <main class="container">
-    <header class="topbar">
-      <div>
-        <h1>Player</h1>
-        <div class="muted">code: <strong id="roomCodeOut">?</strong> • você: <strong id="uidOut">?</strong></div>
-      </div>
-      <button id="btnSignOut" class="btn danger">Sair</button>
-    </header>
+<main class="container">
+<header class="topbar">
+<div>
+<h1>Player</h1>
+<div class="muted">code: <strong id="roomCodeOut">?</strong> • você: <strong id="uidOut">?</strong></div>
+</div>
+<button class="btn danger" id="btnSignOut">Sair</button>
+</header>
+<div class="status" id="status"></div>
+<div aria-label="Abas de fichas" class="tabs hidden" id="sheetTabs"></div><div aria-label="Abas principais" class="tabs" id="playerMainTabs"><button class="tab active" data-tab="resume" type="button">Resumo</button><button class="tab" data-tab="rolagem" type="button">Rolagem</button><button class="tab" data-tab="itens" type="button">Itens</button><button class="tab" data-tab="vantagens" type="button">Vantagens</button><button class="tab" data-tab="desvantagens" type="button">Desvantagens</button></div><div class="tabpane" data-pane="resume"><section class="card">
+<h2 id="charName">(sem ficha)</h2>
+<div class="muted">Mental: <strong id="mentalOut">0</strong></div>
+<div class="grid4" style="margin-top:12px">
+<button class="btn attr" data-attr="QI">QI: <span id="aQI">0</span></button>
+<button class="btn attr" data-attr="FOR">FOR: <span id="aFOR">0</span></button>
+<button class="btn attr" data-attr="DEX">DEX: <span id="aDEX">0</span></button>
+<button class="btn attr" data-attr="VIG">VIG: <span id="aVIG">0</span></button>
+</div>
+<div class="grid2 mt12">
+<div class="stat"><div class="muted">Intenções/turno</div><div class="val"><span id="statIntentions">0</span><span class="mods-inline" id="statIntentionsMods"></span></div><div class="hint muted">1 + floor((VIG+DEX)/2)</div></div>
+<div class="stat"><div class="muted">Movimento/intenção</div><div class="val"><span id="statMove">0</span> m <span class="mods-inline" id="statMoveMods"></span></div><div class="hint muted">DEX + 2</div></div>
+<div class="stat"><div class="muted">DEF base</div><div class="val"><span id="statDef">0</span><span class="mods-inline" id="statDefMods"></span></div><div class="hint muted">6 + DEX</div></div>
+<div class="stat">
+<div class="muted">Limite inventário</div>
+<div class="val">
+<span id="statInv">0</span> kg <span class="mods-inline" id="statInvMods"></span>
+<input aria-label="Inventário atual" class="inline-num" id="invCurrent" inputmode="numeric" min="0" placeholder="Atual" step="1" type="number"/>
+</div>
+<div class="hint muted">(FOR+VIG) * 4 • atual</div>
+</div>
+</div>
+<div class="mt12">
+<h3>RES e HP</h3>
+<div class="grid3">
+<div class="stat"><div class="muted">Cabeça RES</div><div class="val" id="resHead">0</div></div>
+<div class="stat"><div class="muted">Torso RES</div><div class="val" id="resTorso">0</div></div>
+<div class="stat"><div class="muted">Braços e pernas RES</div><div class="val" id="resLimb">0</div></div>
+<div class="stat">
+<div class="muted">HP total</div>
+<div class="val">
+<span id="hpTotal">0</span>
+<input aria-label="HP atual" class="inline-num" id="hpCurrent" inputmode="numeric" min="0" placeholder="Atual" step="1" type="number"/>
+</div>
+<div class="hint muted">atual</div>
+</div>
+</div>
+<div class="muted" style="margin-top:8px">Fórmulas: Cabeça (VIG+3)*3+6 • Torso (VIG+FOR+3)*3+6 • Braços/Pernas (VIG+3)*2+6 • HP=(RES cabeça + RES torso + RES braços/pernas)*2</div>
+</div>
+<div class="mt12">
+<h3>Anotações compartilhadas</h3>
+<textarea id="sharedNotes" placeholder="Escreva anotações... (salva automático)" rows="6" spellcheck="false"></textarea>
+</div>
 
-    <div id="status" class="status"></div>
 
-    <div id="sheetTabs" class="tabs hidden" aria-label="Abas de fichas"></div>
+</section></div><div class="tabpane hidden" data-pane="rolagem"><section class="card"><h2>Rolagem</h2><div class="mt12">
+<h3>Rolagem</h3>
+<pre class="pre" id="rollOut"></pre>
+</div><div class="mt12">
+<h3>Dados soltos</h3>
+<div class="row wrap">
+<button class="btn die" data-die="4">d4</button>
+<button class="btn die" data-die="6">d6</button>
+<button class="btn die" data-die="8">d8</button>
+<button class="btn die" data-die="10">d10</button>
+<button class="btn die" data-die="12">d12</button>
+</div>
+<div class="muted" id="diceOut"></div>
+</div></section></div><div class="tabpane hidden" data-pane="itens"><div class="card">
+<h2>Itens</h2>
+<div class="list" id="itemsList"></div>
+</div></div><div class="tabpane hidden" data-pane="vantagens"><div class="card">
+<h2>Vantagens</h2>
+<div class="list" id="advantagesList"></div>
+</div></div><div class="tabpane hidden" data-pane="desvantagens"><section class="card">
+<h2>Desvantagens</h2>
+<div class="list" id="disadvantagesList"></div>
+</section></div>
 
-    <section class="card">
-      <h2 id="charName">(sem ficha)</h2>
-      <div class="muted">Mental: <strong id="mentalOut">0</strong></div>
 
-      <div class="grid4" style="margin-top:12px">
-        <button class="btn attr" data-attr="QI">QI: <span id="aQI">0</span></button>
-        <button class="btn attr" data-attr="FOR">FOR: <span id="aFOR">0</span></button>
-        <button class="btn attr" data-attr="DEX">DEX: <span id="aDEX">0</span></button>
-        <button class="btn attr" data-attr="VIG">VIG: <span id="aVIG">0</span></button>
-      </div>
 
-      <div class="grid2 mt12">
-        <div class="stat"><div class="muted">Intenções/turno</div><div class="val"><span id="statIntentions">0</span><span id="statIntentionsMods" class="mods-inline"></span></div><div class="hint muted">1 + floor((VIG+DEX)/2)</div></div>
-        <div class="stat"><div class="muted">Movimento/intenção</div><div class="val"><span id="statMove">0</span> m <span id="statMoveMods" class="mods-inline"></span></div><div class="hint muted">DEX + 2</div></div>
-        <div class="stat"><div class="muted">DEF base</div><div class="val"><span id="statDef">0</span><span id="statDefMods" class="mods-inline"></span></div><div class="hint muted">6 + DEX</div></div>
-        <div class="stat">
-          <div class="muted">Limite inventário</div>
-          <div class="val">
-            <span id="statInv">0</span> kg <span id="statInvMods" class="mods-inline"></span>
-            <input id="invCurrent" class="inline-num" type="number" inputmode="numeric" min="0" step="1" placeholder="Atual" aria-label="Inventário atual" />
-          </div>
-          <div class="hint muted">(FOR+VIG) * 4 • atual</div>
-        </div>
-      </div>
-
-      <div class="mt12">
-        <h3>RES e HP</h3>
-        <div class="grid3">
-          <div class="stat"><div class="muted">Cabeça RES</div><div class="val" id="resHead">0</div></div>
-          <div class="stat"><div class="muted">Torso RES</div><div class="val" id="resTorso">0</div></div>
-          <div class="stat"><div class="muted">Braços e pernas RES</div><div class="val" id="resLimb">0</div></div>
-          <div class="stat">
-            <div class="muted">HP total</div>
-            <div class="val">
-              <span id="hpTotal">0</span>
-              <input id="hpCurrent" class="inline-num" type="number" inputmode="numeric" min="0" step="1" placeholder="Atual" aria-label="HP atual" />
-            </div>
-            <div class="hint muted">atual</div>
-          </div>
-        </div>
-        <div class="muted" style="margin-top:8px">Fórmulas: Cabeça (VIG+3)*3+6 • Torso (VIG+FOR+3)*3+6 • Braços/Pernas (VIG+3)*2+6 • HP=(RES cabeça + RES torso + RES braços/pernas)*2</div>
-      </div>
-
-      <div class="mt12">
-        <h3>Anotações compartilhadas</h3>
-        <textarea id="sharedNotes" rows="6" spellcheck="false" placeholder="Escreva anotações... (salva automático)"></textarea>
-      </div>
-
-      <div class="mt12">
-        <h3>Rolagem</h3>
-        <pre id="rollOut" class="pre"></pre>
-      </div>
-
-      <div class="mt12">
-        <h3>Dados soltos</h3>
-        <div class="row wrap">
-          <button class="btn die" data-die="4">d4</button>
-          <button class="btn die" data-die="6">d6</button>
-          <button class="btn die" data-die="8">d8</button>
-          <button class="btn die" data-die="10">d10</button>
-          <button class="btn die" data-die="12">d12</button>
-        </div>
-        <div class="muted" id="diceOut"></div>
-      </div>
-    </section>
-
-    <section class="grid2">
-      <div class="card">
-        <h2>Itens</h2>
-        <div id="itemsList" class="list"></div>
-      </div>
-      <div class="card">
-        <h2>Vantagens</h2>
-        <div id="advantagesList" class="list"></div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Desvantagens</h2>
-      <div id="disadvantagesList" class="list"></div>
-    </section>
-  </main>
-
-  <script type="module" src="./app.js"></script>
+</main>
+<script src="./app.js" type="module"></script>
 </body>
 </html>
