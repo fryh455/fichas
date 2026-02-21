@@ -57,6 +57,19 @@
               ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists() || root.child('rooms/'+$roomId+'/assignmentsByName/'+root.child('rooms/'+$roomId+'/members/'+auth.uid+'/nameKey').val()+'/sheetIds/'+$sheetId).exists())",
               ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists() || root.child('rooms/'+$roomId+'/assignmentsByName/'+root.child('rooms/'+$roomId+'/members/'+auth.uid+'/nameKey').val()+'/sheetIds/'+$sheetId).exists())",
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999999"
+            },
+            "mental": {
+              ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetId').val() == $sheetId || root.child('rooms/'+$roomId+'/assignments/'+auth.uid+'/sheetIds/'+$sheetId).exists() || root.child('rooms/'+$roomId+'/assignmentsByName/'+root.child('rooms/'+$roomId+'/members/'+auth.uid+'/nameKey').val()+'/sheetIds/'+$sheetId).exists())",
+              ".write": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('assignments/'+auth.uid+'/sheetId').val() == $sheetId)",
+              ".validate": "newData.isNumber() && newData.val() >= -11 && newData.val() <= 5"
+            },
+            "advantages": {
+              "$advId": {
+                "usesCurrent": {
+                  ".write": "auth != null && (auth.uid == data.parent().parent().parent().child('meta/gmUid').val() || data.parent().parent().parent().child('assignments/'+auth.uid+'/sheetId').val() == $sheetId)",
+                  ".validate": "newData.isNumber()"
+                }
+              }
             }
           }
         },

@@ -210,6 +210,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .btn.danger:hover{ background: rgba(251,113,133,.18); }
 .btn.small{ padding: 8px 10px; font-size: 12.5px; border-radius: 12px; }
 
+.btn.tiny{ padding: 4px 9px; font-size: 12px; border-radius: 11px; line-height:1; }
+.mental-row{ display:flex; align-items:center; gap:8px; }
+
 /* stats */
 .stat{
   padding: 12px;
@@ -387,3 +390,36 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   border-color: rgba(45,212,191,.25);
 }
 .btn.die:hover{ background: rgba(45,212,191,.14); border-color: rgba(45,212,191,.38); }
+
+
+/* modal / popup */
+.modal{
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(10px);
+  z-index: 60;
+}
+.modal.hidden{ display:none; }
+.modal-card{
+  width: min(620px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  box-shadow: 0 18px 70px rgba(0,0,0,.6);
+  overflow: hidden;
+}
+.modal-head{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,.03);
+}
+.modal-head .title{ font-weight: 700; }

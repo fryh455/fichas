@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getDatabase, ref, get, set, update, onValue, push, serverTimestamp
-  , query, orderByChild, limitToLast, remove
+  , query, orderByChild, limitToLast, remove, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig = {
@@ -27,5 +27,5 @@ export {
   setPersistence, browserLocalPersistence,
   signInAnonymously, signOut, onAuthStateChanged,
   ref, get, set, update, onValue, push, serverTimestamp,
-  query, orderByChild, limitToLast, remove
+  query, orderByChild, limitToLast, remove, runTransaction
 };

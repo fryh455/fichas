@@ -17,9 +17,9 @@
 <button class="btn danger" id="btnSignOut">Sair</button>
 </header>
 <div class="status" id="status"></div>
-<div aria-label="Abas de fichas" class="tabs hidden" id="sheetTabs"></div><div aria-label="Abas principais" class="tabs" id="playerMainTabs"><button class="tab active" data-tab="resume" type="button">Resumo</button><button class="tab" data-tab="rolagem" type="button">Rolagem</button><button class="tab" data-tab="itens" type="button">Itens</button><button class="tab" data-tab="vantagens" type="button">Vantagens</button><button class="tab" data-tab="desvantagens" type="button">Desvantagens</button></div><div class="tabpane" data-pane="resume"><section class="card">
+<div aria-label="Abas de fichas" class="tabs hidden" id="sheetTabs"></div><div aria-label="Abas principais" class="tabs" id="playerMainTabs"><button class="tab active" data-tab="resume" type="button">Resumo</button><button class="tab" data-tab="rolagem" type="button">Rolagens</button><button class="tab" data-tab="itens" type="button">Itens</button><button class="tab" data-tab="vantagens" type="button">Vantagens</button><button class="tab" data-tab="desvantagens" type="button">Desvantagens</button></div><div class="tabpane" data-pane="resume"><section class="card">
 <h2 id="charName">(sem ficha)</h2>
-<div class="muted">Mental: <strong id="mentalOut">0</strong></div>
+<div class="muted mental-row">Mental: <button class="btn tiny" id="btnMentalMinus" type="button">−</button> <strong id="mentalOut">0</strong> <button class="btn tiny" id="btnMentalPlus" type="button">+</button></div>
 <div class="grid4" style="margin-top:12px">
 <button class="btn attr" data-attr="QI">QI: <span id="aQI">0</span></button>
 <button class="btn attr" data-attr="FOR">FOR: <span id="aFOR">0</span></button>
@@ -62,20 +62,20 @@
 </div>
 
 
-</section></div><div class="tabpane hidden" data-pane="rolagem"><section class="card"><h2>Rolagem</h2><div class="mt12">
-<h3>Rolagem</h3>
-<pre class="pre" id="rollOut"></pre>
-</div><div class="mt12">
-<h3>Dados soltos</h3>
-<div class="row wrap">
-<button class="btn die" data-die="4">d4</button>
-<button class="btn die" data-die="6">d6</button>
-<button class="btn die" data-die="8">d8</button>
-<button class="btn die" data-die="10">d10</button>
-<button class="btn die" data-die="12">d12</button>
+</section></div><div class="tabpane hidden" data-pane="rolagem"><section class="card"><h2>Rolagens</h2>
+<div class="row" style="justify-content:space-between;align-items:center;margin-top:8px">
+  <div class="muted">Histórico desta sessão (limpa ao reiniciar)</div>
+  <button class="btn small danger" id="btnClearMyRolls" type="button">Limpar</button>
 </div>
-<div class="muted" id="diceOut"></div>
-</div></section></div><div class="tabpane hidden" data-pane="itens"><div class="card">
+<div class="list" id="myRollsList" style="margin-top:10px"></div>
+
+<div class="mt12"><h3>Dados soltos</h3><div class="row wrap">
+<button class="btn die" data-die="4" type="button">d4</button>
+<button class="btn die" data-die="6" type="button">d6</button>
+<button class="btn die" data-die="8" type="button">d8</button>
+<button class="btn die" data-die="10" type="button">d10</button>
+<button class="btn die" data-die="12" type="button">d12</button>
+</div><div class="muted" id="diceOut"></div></div></section></div><div class="tabpane hidden" data-pane="itens"><div class="card">
 <h2>Itens</h2>
 <div class="list" id="itemsList"></div>
 </div></div><div class="tabpane hidden" data-pane="vantagens"><div class="card">
@@ -87,6 +87,17 @@
 </section></div>
 
 
+
+
+<div class="modal hidden" id="rollPopup" role="dialog" aria-modal="true" aria-label="Resultado da rolagem">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="title" id="rollPopupTitle">Rolagem</div>
+      <button class="btn small" id="rollPopupClose" type="button">Fechar</button>
+    </div>
+    <pre class="pre" id="rollPopupBody"></pre>
+  </div>
+</div>
 
 </main>
 <script src="./app.js" type="module"></script>

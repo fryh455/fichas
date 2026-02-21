@@ -3,7 +3,7 @@ import {
   setPersistence, browserLocalPersistence,
   signInAnonymously, signOut, onAuthStateChanged,
   ref, get, set, update, onValue, push, serverTimestamp,
-  query, orderByChild, limitToLast, remove
+  query, orderByChild, limitToLast, remove, runTransaction
 } from "./firebase.js";
 
 /** --------------------------
@@ -1653,8 +1653,17 @@ function initPlayer(){
 
   const charName = $("#charName");
   const mentalOut = $("#mentalOut");
-  const rollOut = $("#rollOut");
+  const btnMentalMinus = $("#btnMentalMinus");
+  const btnMentalPlus = $("#btnMentalPlus");
+
+  const myRollsList = $("#myRollsList");
+  const btnClearMyRolls = $("#btnClearMyRolls");
   const diceOut = $("#diceOut");
+
+  const rollPopup = $("#rollPopup");
+  const rollPopupTitle = $("#rollPopupTitle");
+  const rollPopupBody = $("#rollPopupBody");
+  const rollPopupClose = $("#rollPopupClose");
 
   const itemsList = $("#itemsList");
   const advantagesList = $("#advantagesList");
@@ -1700,7 +1709,101 @@ function initPlayer(){
   let activeSheetId = null;
 
   let sheet = null;
-  const sheetCache = new Map(); // sheetId -> sheet data
+  const sheetCache = new Map(); // sheetId -> sheet
+
+  // rolagens (histórico local + popup)
+  let myRollHistory = [];
+  let rollPopupTimer = null;
+
+  function showRollPopup(title, body){
+    if(!rollPopup || !rollPopupTitle || !rollPopupBody) return;
+    rollPopupTitle.textContent = String(title || "Rolagem");
+    rollPopupBody.textContent = String(body || "");
+    rollPopup.classList.remove("hidden");
+
+    if(rollPopupTimer) clearTimeout(rollPopupTimer);
+    rollPopupTimer = setTimeout(() => {
+      try{ rollPopup.classList.add("hidden"); }catch(_){}
+    }, 6500);
+  }
+
+  function closeRollPopup(){
+    try{
+      if(rollPopupTimer) clearTimeout(rollPopupTimer);
+      rollPopupTimer = null;
+      rollPopup?.classList.add("hidden");
+    }catch(_){}
+  }
+
+  rollPopupClose?.addEventListener("click", closeRollPopup);
+  rollPopup?.addEventListener("click", (e) => {
+    if(e.target === rollPopup) closeRollPopup();
+  });
+
+  function addMyRoll(entry){
+    myRollHistory.unshift(entry);
+    if(myRollHistory.length > 80) myRollHistory.length = 80;
+    renderMyRollHistory();
+  }
+
+  function renderMyRollHistory(){
+    if(!myRollsList) return;
+    if(myRollHistory.length === 0){
+      myRollsList.innerHTML = '<div class="muted">(nenhuma rolagem nesta sessão)</div>';
+      return;
+    }
+    myRollsList.innerHTML = "";
+    for(const r of myRollHistory){
+      const row = document.createElement("div");
+      row.className = "item";
+      const when = new Date(r.at || Date.now());
+      const t = when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      row.innerHTML = `
+        <div class="left">
+          <div class="title">${escapeHtml(r.title || "Rolagem")}</div>
+          <div class="muted">${t}</div>
+        </div>
+        <div class="right">
+          <span class="badge">total: ${escapeHtml(String(r.total))}</span>
+          <button class="btn small" type="button">Ver</button>
+        </div>
+      `;
+      row.querySelector("button")?.addEventListener("click", () => showRollPopup(r.title, r.body));
+      myRollsList.appendChild(row);
+    }
+  }
+
+  btnClearMyRolls?.addEventListener("click", () => {
+    myRollHistory = [];
+    renderMyRollHistory();
+  });
+
+  renderMyRollHistory();
+
+
+  async function adjustMental(delta){
+    try{
+      if(!activeSheetId) return;
+      const mRef = ref(db, `rooms/${roomId}/sheets/${activeSheetId}/mental`);
+      await runTransaction(mRef, (cur) => {
+        let v = (typeof cur === "number" && Number.isFinite(cur)) ? Math.trunc(cur) : asInt(cur, 0);
+        v = v + (Math.trunc(Number(delta) || 0));
+        // faixa do SUR4 (mental)
+        if(v < -11) v = -11;
+        if(v > 5) v = 5;
+        return v;
+      });
+    }catch(e){
+      console.warn("mental update failed", e);
+      try{ setStatus(`Falha ao atualizar mental: ${e?.code || e?.message || e}`, "err"); }catch(_){}
+    }
+  }
+
+  btnMentalMinus?.addEventListener("click", () => adjustMental(-1));
+  btnMentalPlus?.addEventListener("click", () => adjustMental(+1));
+
+
+ data
   const sheetUnsubs = new Map(); // sheetId -> unsubscribe
 
   let notesLocalEditing = false;
@@ -1724,7 +1827,8 @@ function initPlayer(){
     if(itemsList) itemsList.innerHTML = "";
     if(advantagesList) advantagesList.innerHTML = "";
     if(disadvantagesList) disadvantagesList.innerHTML = "";
-    if(rollOut) rollOut.textContent = "";
+    closeRollPopup();
+    renderMyRollHistory();
     if(sharedNotesEl) sharedNotesEl.value = "";
     if(hpCurrentEl) hpCurrentEl.value = "";
     if(invCurrentEl) invCurrentEl.value = "";
@@ -2022,12 +2126,16 @@ function initPlayer(){
               <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
               <div class="kv">${badges}</div>
             </div>
-            <div class="row" style="margin:0">
+            <div class="row" style="margin:0;gap:8px">
               <button class="btn small primary" data-roll="1">Rolar</button>
+              ${category === "advantages" ? '<button class="btn small" data-dt="1" title="DT (d12) soma nos usos">DT</button>' : ''}
             </div>
           `;
           div.querySelector("[data-roll]")?.addEventListener("click", ()=>{
-            rollActive({ category, id, entry: { name: e?.name || "(sem nome)", atributoBase: attrBase, modMode, modValue } });
+            rollActive({ category, id, entry: { type: "ATIVA", name: e?.name || "(sem nome)", atributoBase: attrBase, modMode, modValue } });
+          });
+          div.querySelector("[data-dt]")?.addEventListener("click", ()=>{
+            rollActiveDtOnly({ id, entry: { name: e?.name || "(sem nome)" } });
           });
         }else{
           const key = `${category}:${id}`;
@@ -2116,13 +2224,13 @@ function initPlayer(){
         const v = Number(p.modValue) || 0;
         if(v !== 0){
           soma += v;
-          appliedSoma.push({ name: p.name, value: v });
+          appliedSoma.push({ name: p.name, value: v, category: p.category, id: p.id });
         }
       }else if(p.modMode === "MULT"){
         const v = Number(p.modValue) || 0;
         if(v !== 0){
           mult += v;
-          appliedMult.push({ name: p.name, value: v });
+          appliedMult.push({ name: p.name, value: v, category: p.category, id: p.id });
         }
       }
     }
@@ -2159,11 +2267,8 @@ function initPlayer(){
   }
 
   // Output: somente d12 e modificadores != 0 + total
-  function rollCore({ title, rollAttrKey, baseAttrValue, activeMod, activeName }){
-    if(!sheet){
-      setStatus("Sem ficha carregada.", "err");
-      return;
-    }
+  function computeRoll({ title, rollAttrKey, baseAttrValue, activeMod, activeName }){
+    if(!sheet) return null;
 
     const mental = asInt(sheet.mental, 0);
     const { diceBonus } = mentalBonuses(mental);
@@ -2215,11 +2320,11 @@ function initPlayer(){
     if(isCrit) details.push(`crítico: SIM`);
 
     const lines = [];
-    lines.push(String(title || "Rolagem"));
+    const cleanTitle = String(title || "Rolagem");
+    lines.push(cleanTitle);
     lines.push("");
     lines.push(`d12: ${d12}`);
 
-    // SOMAS com origem
     if(diceBonus !== 0) lines.push(`${diceBonus >= 0 ? "+" : ""}${diceBonus} (mental)`);
     if(baseAttrValue !== 0){
       const label = rollAttrKey ? `atributo ${rollAttrKey}` : "atributo";
@@ -2234,9 +2339,7 @@ function initPlayer(){
       lines.push(`${somaAtiva >= 0 ? "+" : ""}${somaAtiva} (ativa: ${activeName || "ação"})`);
     }
 
-    // MULT com origem (só mostra se existir)
     if(hasMult){
-      // lista mult passivas
       for(const a of pass.appliedMult){
         lines.push(`${a.value >= 0 ? "+" : ""}${a.value} (mult passiva: ${a.name})`);
       }
@@ -2251,11 +2354,98 @@ function initPlayer(){
     lines.push("");
     lines.push(`total: ${totalFinal}`);
 
-    rollOut.textContent = lines.join("\n");
-    playerTabs?.activate("rolagem");
+    const body = lines.join("\n");
+
+    return {
+      title: cleanTitle,
+      total: totalFinal,
+      body,
+      details,
+      pass
+    };
+  }
+
+  async function bumpPassiveUses(pass){
+    try{
+      if(!pass || !uid || !activeSheetId) return;
+
+      const ids = [];
+      const seen = new Set();
+      const all = [...(pass.appliedSoma || []), ...(pass.appliedMult || [])];
+      for(const a of all){
+        if(!a || a.category !== "advantages" || !a.id) continue;
+        const k = `${a.category}:${a.id}`;
+        if(seen.has(k)) continue;
+        seen.add(k);
+        ids.push(a.id);
+      }
+      if(ids.length === 0) return;
+
+      for(const advId of ids){
+        const entry = sheet?.advantages?.[advId];
+        if(!entry) continue;
+
+        const hasUses = (entry.usesCurrent !== null && entry.usesCurrent !== undefined) || (entry.usesMax !== null && entry.usesMax !== undefined);
+        if(!hasUses) continue;
+
+        const max = Number.isFinite(Number(entry.usesMax)) ? Math.trunc(Number(entry.usesMax)) : null;
+
+        const uRef = ref(db, `rooms/${roomId}/sheets/${activeSheetId}/advantages/${advId}/usesCurrent`);
+        await runTransaction(uRef, (cur) => {
+          let v = (typeof cur === "number" && Number.isFinite(cur)) ? Math.trunc(cur) : 0;
+          v = v + 1;
+          if(max !== null) v = Math.min(v, max);
+          return v;
+        });
+      }
+    }catch(e){
+      console.warn("bumpPassiveUses failed", e);
+    }
+  }
+
+  async function bumpActiveUses(advId, delta){
+    try{
+      if(!advId || !uid || !activeSheetId) return;
+      const entry = sheet?.advantages?.[advId];
+      if(!entry) return;
+
+      const hasUses = (entry.usesCurrent !== null && entry.usesCurrent !== undefined) || (entry.usesMax !== null && entry.usesMax !== undefined);
+      if(!hasUses) return;
+
+      const d = Math.trunc(Number(delta) || 0);
+      if(!Number.isFinite(d) || d === 0) return;
+
+      const max = Number.isFinite(Number(entry.usesMax)) ? Math.trunc(Number(entry.usesMax)) : null;
+
+      const uRef = ref(db, `rooms/${roomId}/sheets/${activeSheetId}/advantages/${advId}/usesCurrent`);
+      await runTransaction(uRef, (cur) => {
+        let v = (typeof cur === "number" && Number.isFinite(cur)) ? Math.trunc(cur) : 0;
+        v = v + d;
+        if(max !== null) v = Math.min(v, max);
+        return v;
+      });
+    }catch(e){
+      console.warn("bumpActiveUses failed", e);
+    }
+  }
+
+  function rollCore({ title, rollAttrKey, baseAttrValue, activeMod, activeName }){
+    if(!sheet){
+      setStatus("Sem ficha carregada.", "err");
+      return;
+    }
+
+    const res = computeRoll({ title, rollAttrKey, baseAttrValue, activeMod, activeName });
+    if(!res) return;
+
+    showRollPopup(res.title, res.body);
+    addMyRoll({ title: res.title, total: res.total, body: res.body, at: Date.now() });
 
     // log pro GM (total imediato + detalhes ao revelar)
-    writeRollLog({ title: title || "Rolagem", total: totalFinal, details }).catch(()=>{});
+    writeRollLog({ title: res.title, total: res.total, details: res.details }).catch(()=>{});
+
+    // usos (PASSIVAS) – incrementa +1 quando aplicadas na rolagem
+    bumpPassiveUses(res.pass).catch(()=>{});
   }
 
   function rollAttribute(attrKey){
@@ -2281,6 +2471,35 @@ function initPlayer(){
       value: entry.modMode === "NONE" ? 0 : (Number(entry.modValue) || 0)
     };
 
+    // SUR4: ATIVAS rolam DT (d12 puro) separado; só o DT soma nos usos.
+    if(category === "advantages" && entry.type === "ATIVA"){
+      if(!sheet){
+        setStatus("Sem ficha carregada.", "err");
+        return;
+      }
+      const res = computeRoll({
+        title: `Rolagem: ${entry.name}`,
+        rollAttrKey: baseAttrKey, // pode ser null
+        baseAttrValue,
+        activeMod,
+        activeName: entry.name
+      });
+      if(!res) return;
+
+      const dt = buildDice(12);
+      const body = `${res.body}\n\nDT (d12): ${dt}\nusos +${dt}`;
+
+      showRollPopup(res.title, body);
+      addMyRoll({ title: res.title, total: res.total, body, at: Date.now() });
+
+      const details = [...res.details, `DT (d12): ${dt}`, `usos +${dt}`];
+      writeRollLog({ title: res.title, total: res.total, details }).catch(()=>{});
+
+      bumpPassiveUses(res.pass).catch(()=>{});
+      bumpActiveUses(id, dt).catch(()=>{});
+      return;
+    }
+
     rollCore({
       title: `Rolagem: ${entry.name}`,
       rollAttrKey: baseAttrKey, // pode ser null
@@ -2288,6 +2507,21 @@ function initPlayer(){
       activeMod,
       activeName: entry.name
     });
+  }
+
+  function rollActiveDtOnly({ id, entry }){
+    if(!sheet){
+      setStatus("Sem ficha carregada.", "err");
+      return;
+    }
+    const dt = buildDice(12);
+    const title = `DT: ${entry.name}`;
+    const body = `DT (d12): ${dt}\n\nusos +${dt}`;
+    showRollPopup(title, body);
+    addMyRoll({ title, total: dt, body, at: Date.now() });
+
+    writeRollLog({ title, total: dt, details: [`DT (d12): ${dt}`, `usos +${dt}`] }).catch(()=>{});
+    bumpActiveUses(id, dt).catch(()=>{});
   }
 
   (async ()=>{
@@ -2356,7 +2590,14 @@ function initPlayer(){
         if(!Number.isFinite(n) || n <= 1) return;
         const r = buildDice(n);
         diceOut.textContent = `d${n} -> ${r}`;
-    playerTabs?.activate("rolagem");
+
+        const title = `d${n} (solto)`;
+        const body = `${title}\n\nd${n}: ${r}\n\ntotal: ${r}`;
+        showRollPopup(title, body);
+        addMyRoll({ title, total: r, body, at: Date.now() });
+
+        // log pro GM também (mesmo sem mods)
+        writeRollLog({ title, total: r, details: [`d${n}: ${r}`] }).catch(()=>{});
       });
     });
 
