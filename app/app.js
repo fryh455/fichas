@@ -1864,7 +1864,7 @@ function initPlayer(){
       .sort((a,b)=> (a[1]?.name || "").localeCompare(b[1]?.name || ""))
       .forEach(([id, e]) => {
         const type = (e?.type === "ATIVA") ? "ATIVA" : "PASSIVA";
-        const attrBase = (["QI","FOR","DEX","VIG"].includes(e?.atributoBase)) ? e.atributoBase : null;
+        const attrBase = (["QI","FOR","DEX","VIG","INTENCOES","DEF","MOV","INV"].includes(e?.atributoBase)) ? e.atributoBase : null;
         const modMode = (e?.modMode === "SOMA" || e?.modMode === "MULT" || e?.modMode === "NONE") ? e.modMode : "NONE";
         const modValue = (modMode === "NONE") ? null : (Number.isFinite(Number(e?.modValue)) ? Number(e.modValue) : 0);
 
