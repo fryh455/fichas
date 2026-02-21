@@ -1803,7 +1803,6 @@ function initPlayer(){
   btnMentalPlus?.addEventListener("click", () => adjustMental(+1));
 
 
- data
   const sheetUnsubs = new Map(); // sheetId -> unsubscribe
 
   let notesLocalEditing = false;
