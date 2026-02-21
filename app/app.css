@@ -59,3 +59,26 @@ textarea{ resize:vertical; }
 .mods-inline{ font-weight:650; font-size:12px; margin-left:6px; opacity:.8; }
 .inline-num{ width:110px; display:inline-block; margin-left:10px; padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background:rgba(0,0,0,.20); color:#e7eef7; }
 .inline-num:focus{ outline:none; border-color:rgba(0,170,255,.45); }
+
+
+/* toast (popup rápido) */
+.toast{
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 9999;
+  max-width: 420px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0,0,0,.78);
+  border: 1px solid rgba(255,255,255,.18);
+  box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity .18s ease, transform .18s ease;
+  pointer-events: none;
+}
+.toast.show{ opacity: 1; transform: translateY(0); }
+.toast.ok{ border-color: rgba(0,255,170,.45); }
+.toast.err{ border-color: rgba(255,80,80,.55); }
+.toast.warn{ border-color: rgba(255,200,0,.45); }

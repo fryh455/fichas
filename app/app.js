@@ -19,6 +19,20 @@ function setStatus(msg, type=""){
   el.textContent = msg || "";
 }
 
+function toast(msg, type="ok", ms=1200){
+  try{
+    const div = document.createElement("div");
+    div.className = `toast ${type}`;
+    div.textContent = String(msg || "");
+    document.body.appendChild(div);
+    requestAnimationFrame(()=> div.classList.add("show"));
+    setTimeout(()=>{
+      div.classList.remove("show");
+      setTimeout(()=> div.remove(), 220);
+    }, ms);
+  }catch(_){}
+}
+
 function mustRoomId(){
   const url = new URL(location.href);
   const roomId = url.searchParams.get("roomId");
@@ -347,6 +361,8 @@ function initGM(){
   const mentalEl = $("#mental");
   const sharedNotesEl = $("#sharedNotes");
   const btnDeleteSheet = $("#btnDeleteSheet");
+  const btnSaveSheet = $("#btnSaveSheet");
+  const btnCancelSheet = $("#btnCancelSheet");
 
   const assignPlayer = $("#assignPlayer");
   const assignSheet = $("#assignSheet");
@@ -758,6 +774,8 @@ function initGM(){
     if(sharedNotesEl) sharedNotesEl.value = "";
     if(gmNotesUnsub){ try{ gmNotesUnsub(); }catch(_){} gmNotesUnsub = null; }
     $("#sheetFormTitle") && ($("#sheetFormTitle").textContent = "Criar");
+    if(btnSaveSheet) btnSaveSheet.textContent = "Criar ficha";
+    if(btnDeleteSheet) btnDeleteSheet.classList.add("hidden");
     currentSheetId = null;
     currentSheetDraft = { items:{}, advantages:{}, disadvantages:{} };
     renderEntryLists();
@@ -824,6 +842,8 @@ function initGM(){
     };
 
     $("#sheetFormTitle") && ($("#sheetFormTitle").textContent = `Editar: ${s.name || id}`);
+    if(btnSaveSheet) btnSaveSheet.textContent = "Salvar ficha";
+    if(btnDeleteSheet) btnDeleteSheet.classList.remove("hidden");
     renderEntryLists();
     if(userAction){
       clearEntryEditor();
@@ -836,6 +856,13 @@ function initGM(){
     openEditor();
     setStatus("Nova ficha (draft).", "ok");
   });
+
+  btnCancelSheet?.addEventListener("click", () => {
+    clearForm();
+    toast("Cancelado.", "warn");
+    setStatus("Cancelado.", "warn");
+  });
+
 
   sheetForm?.addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -916,6 +943,8 @@ function initGM(){
       sheetIdEl.value = finalId;
       currentSheetId = finalId;
       setStatus(`Ficha salva: ${payload.name}`, "ok");
+      toast("Salvo.", "ok");
+      clearForm();
     }catch(e){
       console.error(e);
       setStatus(`Erro ao salvar: ${e?.message || e}`, "err");
@@ -1374,8 +1403,8 @@ function initPlayer(){
   let activeSheetId = null;
 
   let sheet = null;
-  let sheetUnsub = null;
-  let notesUnsub = null;
+  const sheetCache = new Map(); // sheetId -> sheet data
+  const sheetUnsubs = new Map(); // sheetId -> unsubscribe
 
   let notesLocalEditing = false;
   let hpLocalEditing = false;
@@ -1474,10 +1503,56 @@ function initPlayer(){
     refreshTabLabels();
   }
 
-  function stopSubs(){
-    if(sheetUnsub){ try{ sheetUnsub(); }catch(_){} sheetUnsub = null; }
-    if(notesUnsub){ try{ notesUnsub(); }catch(_){} notesUnsub = null; }
+  function stopAllSheetSubs(){
+    for(const [, unsub] of sheetUnsubs.entries()){
+      try{ unsub(); }catch(_){}
+    }
+    sheetUnsubs.clear();
+    sheetCache.clear();
     notesLocalEditing = false;
+  }
+
+  function syncSheetSubs(){
+    const want = new Set(assignedSheetIds);
+
+    for(const [id, unsub] of sheetUnsubs.entries()){
+      if(!want.has(id)){
+        try{ unsub(); }catch(_){}
+        sheetUnsubs.delete(id);
+        sheetCache.delete(id);
+      }
+    }
+
+    for(const id of assignedSheetIds){
+      if(sheetUnsubs.has(id)) continue;
+      const unsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${id}`), (s2) => {
+        if(!s2.exists()){
+          sheetCache.delete(id);
+          if(id === activeSheetId){
+            sheet = null;
+            renderEmpty();
+            setStatus("Ficha atribuída não existe mais.", "err");
+          }
+          return;
+        }
+        const val = s2.val();
+        sheetCache.set(id, val);
+
+        const nm = String(val?.name || "").trim();
+        if(nm){
+          sheetNameCache.set(id, nm);
+          refreshTabLabels();
+        }
+
+        if(id === activeSheetId){
+          sheet = val;
+          renderSheet();
+          setStatus("OK.", "ok");
+        }
+      }, `playerSheet_${id}`);
+
+      sheetUnsubs.set(id, unsub);
+    }
   }
 
   function computeDerived(attrs){
@@ -1650,7 +1725,9 @@ function initPlayer(){
     if(activeSheetId === id) return;
 
     selectedPassives.clear();
-    stopSubs();
+    notesLocalEditing = false;
+    hpLocalEditing = false;
+    invLocalEditing = false;
 
     activeSheetId = id || null;
     renderTabs();
@@ -1661,35 +1738,17 @@ function initPlayer(){
       return;
     }
 
+    // garante listener da ficha
+    syncSheetSubs();
+
     setStatus("Carregando ficha...", "warn");
-
-    // Shared notes live-sync
-    if(sharedNotesEl){
-      notesUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${activeSheetId}/sharedNotes`), (ns)=>{
-        if(notesLocalEditing) return;
-        sharedNotesEl.value = String(ns.val() || "");
-      }, "playerSharedNotes");
-    }
-
-    sheetUnsub = onValueSafe(ref(db, `rooms/${roomId}/sheets/${activeSheetId}`), (s2) => {
-      if(!s2.exists()){
-        sheet = null;
-        renderEmpty();
-        setStatus("Ficha atribuída não existe mais.", "err");
-        return;
-      }
-      sheet = s2.val();
-
-      // atualiza label da aba (best-effort)
-      const nm = String(sheet?.name || "").trim();
-      if(nm){
-        sheetNameCache.set(activeSheetId, nm);
-        refreshTabLabels();
-      }
-
+    sheet = sheetCache.get(activeSheetId) || null;
+    if(sheet){
       renderSheet();
       setStatus("OK.", "ok");
-    }, "playerSheet");
+    }else{
+      renderEmpty();
+    }
   }
 
   function mentalBonuses(mental){
@@ -1864,7 +1923,7 @@ function initPlayer(){
       if(!assignedSheetIds.length){
         activeSheetId = null;
         sheet = null;
-        stopSubs();
+        stopAllSheetSubs();
         renderTabs();
         renderEmpty();
         setStatus("Sem ficha atribuída. Peça ao GM para atribuir.", "warn");
@@ -1880,6 +1939,7 @@ function initPlayer(){
 
       renderTabs();
       hydrateTabLabels();
+      syncSheetSubs();
 
       setActiveSheet(next);
     }, "assignment");
