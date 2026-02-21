@@ -250,7 +250,7 @@ function initIndex(){
       const updates = {};
       updates[`roomsByCode/${roomCode}`] = roomId;
       updates[`rooms/${roomId}/meta`] = { code: roomCode, createdAt: ts, gmUid };
-      updates[`rooms/${roomId}/members/${gmUid}`] = { role: "GM", displayName, joinedAt: ts };
+      updates[`rooms/${roomId}/members/${gmUid}`] = { role: "GM", displayName, nameKey: slugify(displayName), joinedAt: ts };
 
       await update(ref(db), updates);
 
@@ -293,7 +293,13 @@ function initIndex(){
       const uid = user.uid;
       const ts = serverTimestamp();
 
-      await set(ref(db, `rooms/${roomId}/members/${uid}`), { role:"PLAYER", displayName, joinedAt: ts });
+      const mRef = ref(db, `rooms/${roomId}/members/${uid}`);
+
+      const mSnap = await get(mRef);
+      if(!mSnap.exists()){
+        await set(mRef, { role:"PLAYER", displayName, nameKey: slugify(displayName), joinedAt: ts });
+      }
+
 
       setStatus("Entrou. Redirecionando...", "ok");
       location.href = `./app/player.html?roomId=${encodeURIComponent(roomId)}`;
@@ -414,6 +420,7 @@ function initGM(){
   let userUid = null;
   let meta = null;
   let members = {};
+  let playersByNameKey = new Map(); // nameKey -> { name, uids: [] }
   let sheets = {};
   let currentSheetId = null; // slug
   let gmNotesUnsub = null;
@@ -664,6 +671,83 @@ function initGM(){
   function numOr0(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
   function intOr0(v){ const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : 0; }
 
+  async function migrateAssignmentsUidToName(){
+    try{
+      const [asSnap, memSnap, byNameSnap] = await Promise.all([
+        get(ref(db, `rooms/${roomId}/assignments`)),
+        get(ref(db, `rooms/${roomId}/members`)),
+        get(ref(db, `rooms/${roomId}/assignmentsByName`)),
+      ]);
+      const assignments = asSnap.val() || {};
+      const mem = memSnap.val() || {};
+      const byName = byNameSnap.val() || {};
+
+      const updates = {};
+
+      const collectIds = (val) => {
+        const out = [];
+        if(val && typeof val === "object" && !Array.isArray(val)){
+          if(typeof val.sheetId === "string" && val.sheetId.trim()) out.push(val.sheetId.trim());
+          const m = val.sheetIds;
+          if(m && typeof m === "object" && !Array.isArray(m)){
+            for(const [k,v] of Object.entries(m)){
+              if(v === true || v === 1 || v === "true") out.push(k);
+            }
+          }
+        }
+        const uniq = [];
+        const seen = new Set();
+        for(const id of out){
+          if(!id) continue;
+          if(seen.has(id)) continue;
+          seen.add(id);
+          uniq.push(id);
+        }
+        return uniq;
+      };
+
+      const toMap = (ids) => {
+        const m = {};
+        ids.forEach(id => { m[id] = true; });
+        return m;
+      };
+
+      for(const [uid, a] of Object.entries(assignments)){
+        const mm = mem?.[uid] || {};
+        const display = String(mm?.displayName || uid);
+        const nameKey = String(mm?.nameKey || slugify(display) || "").trim();
+        if(!nameKey) continue;
+
+        const legacyIds = collectIds(a);
+        if(legacyIds.length === 0) continue;
+
+        const cur = byName?.[nameKey] || {};
+        const curIds = collectIds(cur);
+
+        const merged = [];
+        const seen = new Set();
+        for(const id of [...legacyIds, ...curIds]){
+          if(!id) continue;
+          if(seen.has(id)) continue;
+          seen.add(id);
+          merged.push(id);
+        }
+
+        const primary = (typeof cur.primarySheetId === "string" && cur.primarySheetId.trim())
+          ? cur.primarySheetId.trim()
+          : ((typeof a.primarySheetId === "string" && a.primarySheetId.trim()) ? a.primarySheetId.trim() : (merged[0] || null));
+
+        updates[`rooms/${roomId}/assignmentsByName/${nameKey}`] = { sheetIds: toMap(merged), primarySheetId: primary };
+      }
+
+      if(Object.keys(updates).length){
+        await update(ref(db), updates);
+      }
+    }catch(e){
+      console.warn("Falha ao migrar assignments por nome:", e);
+    }
+  }
+
   function renderMembers(){
     if(!membersList) return;
     membersList.innerHTML = "";
@@ -716,9 +800,25 @@ function initGM(){
 
   function renderAssignPlayers(){
     if(!assignPlayer) return;
-    const players = Object.entries(members)
-      .filter(([,m]) => (m?.role === "PLAYER"))
-      .map(([uid,m]) => ({ uid, name: m?.displayName || uid }))
+
+    const map = new Map();
+    for(const [uid, m] of Object.entries(members || {})){
+      if(m?.role !== "PLAYER") continue;
+      const display = String(m?.displayName || uid);
+      const nameKey = String(m?.nameKey || slugify(display) || uid).trim();
+      if(!nameKey) continue;
+
+      if(!map.has(nameKey)){
+        map.set(nameKey, { name: display, uids: [uid] });
+      }else{
+        map.get(nameKey).uids.push(uid);
+      }
+    }
+
+    playersByNameKey = map;
+
+    const players = Array.from(map.entries())
+      .map(([key, v]) => ({ key, name: v?.name || key, count: (v?.uids || []).length }))
       .sort((a,b)=> a.name.localeCompare(b.name));
 
     assignPlayer.innerHTML = "";
@@ -732,8 +832,8 @@ function initGM(){
       assignPlayer.disabled = false;
       for(const p of players){
         const opt = document.createElement("option");
-        opt.value = p.uid;
-        opt.textContent = `${p.name}`;
+        opt.value = p.key;
+        opt.textContent = p.count > 1 ? `${p.name} (${p.count} sessões)` : `${p.name}`;
         assignPlayer.appendChild(opt);
       }
     }
@@ -937,6 +1037,25 @@ function initGM(){
             updates[`rooms/${roomId}/assignments/${uid}/primarySheetId`] = finalId;
           }
         }
+
+        // por nome
+        const asnSnap = await get(ref(db, `rooms/${roomId}/assignmentsByName`));
+        const asnObj = asnSnap.val() || {};
+        for(const [nameKey, a2] of Object.entries(asnObj)){
+          if(a2?.sheetId === oldId){
+            updates[`rooms/${roomId}/assignmentsByName/${nameKey}/sheetId`] = finalId;
+          }
+
+          const m2 = a2?.sheetIds;
+          if(m2 && typeof m2 === "object" && !Array.isArray(m2) && (m2[oldId] === true || m2[oldId] === 1 || m2[oldId] === "true")){
+            updates[`rooms/${roomId}/assignmentsByName/${nameKey}/sheetIds/${oldId}`] = null;
+            updates[`rooms/${roomId}/assignmentsByName/${nameKey}/sheetIds/${finalId}`] = true;
+          }
+
+          if(a2?.primarySheetId === oldId){
+            updates[`rooms/${roomId}/assignmentsByName/${nameKey}/primarySheetId`] = finalId;
+          }
+        }
       }
 
       await update(ref(db), updates);
@@ -1000,6 +1119,45 @@ function initGM(){
         }
       }
 
+      // por nome
+      const asnSnap = await get(ref(db, `rooms/${roomId}/assignmentsByName`));
+      const asnObj = asnSnap.val() || {};
+      for(const [nameKey, a2] of Object.entries(asnObj)){
+        const legacyId2 = (typeof a2?.sheetId === "string") ? a2.sheetId : null;
+
+        const m2 = a2?.sheetIds;
+        const hasMap2 = (m2 && typeof m2 === "object" && !Array.isArray(m2));
+        const mapKeys2 = hasMap2
+          ? Object.keys(m2).filter(k => k !== id && (m2[k] === true || m2[k] === 1 || m2[k] === "true"))
+          : [];
+
+        const remainingLegacy2 = (legacyId2 && legacyId2 !== id) ? legacyId2 : null;
+
+        const willRemoveLegacy2 = (legacyId2 === id);
+        const willRemoveMap2 = hasMap2 && (m2[id] === true || m2[id] === 1 || m2[id] === "true");
+
+        const remainingCount2 = (remainingLegacy2 ? 1 : 0) + mapKeys2.length;
+
+        if(remainingCount2 === 0){
+          if(willRemoveLegacy2 || willRemoveMap2){
+            updates[`rooms/${roomId}/assignmentsByName/${nameKey}`] = null;
+          }
+          continue;
+        }
+
+        if(willRemoveLegacy2){
+          updates[`rooms/${roomId}/assignmentsByName/${nameKey}/sheetId`] = null;
+        }
+        if(willRemoveMap2){
+          updates[`rooms/${roomId}/assignmentsByName/${nameKey}/sheetIds/${id}`] = null;
+        }
+
+        if(a2?.primarySheetId === id){
+          const nextPrimary2 = remainingLegacy2 || mapKeys2[0] || null;
+          updates[`rooms/${roomId}/assignmentsByName/${nameKey}/primarySheetId`] = nextPrimary2;
+        }
+      }
+
       await update(ref(db), updates);
       clearForm();
       setStatus("Ficha deletada.", "ok");
@@ -1011,13 +1169,13 @@ function initGM(){
 
   btnAssign?.addEventListener("click", async () => {
     try{
-      const playerUid = assignPlayer.value;
+      const playerKey = assignPlayer.value; // nameKey
       const sheetId = assignSheet.value;
-      if(!playerUid) return setStatus("Selecione um player.", "err");
+      if(!playerKey) return setStatus("Selecione um player.", "err");
       if(!sheetId) return setStatus("Selecione uma ficha.", "err");
 
-      // multi-fichas: assignments/<uid> = { sheetIds: {<sheetId>: true}, primarySheetId }
-      const aRef = ref(db, `rooms/${roomId}/assignments/${playerUid}`);
+      // por nome: assignmentsByName/<nameKey>
+      const aRef = ref(db, `rooms/${roomId}/assignmentsByName/${playerKey}`);
       const aSnap = await get(aRef);
       const cur = aSnap.val() || {};
 
@@ -1035,7 +1193,7 @@ function initGM(){
 
       await set(aRef, { sheetIds, primarySheetId: primary });
 
-      setStatus("Atribuição salva (multi-fichas).", "ok");
+      setStatus("Atribuição salva (por nome).", "ok");
     }catch(e){
       console.error(e);
       setStatus(`Erro ao atribuir: ${e?.message || e}`, "err");
@@ -1045,12 +1203,12 @@ function initGM(){
 
   btnUnassign?.addEventListener("click", async () => {
     try{
-      const playerUid = assignPlayer.value;
+      const playerKey = assignPlayer.value; // nameKey
       const sheetId = assignSheet.value;
-      if(!playerUid) return setStatus("Selecione um player.", "err");
+      if(!playerKey) return setStatus("Selecione um player.", "err");
       if(!sheetId) return setStatus("Selecione uma ficha.", "err");
 
-      const aRef = ref(db, `rooms/${roomId}/assignments/${playerUid}`);
+      const aRef = ref(db, `rooms/${roomId}/assignmentsByName/${playerKey}`);
       const aSnap = await get(aRef);
       const cur = aSnap.val() || {};
 
@@ -1070,7 +1228,7 @@ function initGM(){
 
       if(remaining.length === 0){
         await set(aRef, null);
-        setStatus("Atribuição removida (player ficou sem fichas).", "ok");
+        setStatus("Ficha removida (player ficou sem fichas).", "ok");
         return;
       }
 
@@ -1233,7 +1391,7 @@ function initGM(){
           if(e.type !== "ATIVA" && e.type !== "PASSIVA"){
             errors.push(`sheets[${idx}].${cat}[${j}].type deve ser ATIVA|PASSIVA.`);
           }
-          if(e.atributoBase !== null && e.atributoBase !== undefined && e.atributoBase !== "" && !["QI","FOR","DEX","VIG"].includes(e.atributoBase)){
+          if(e.atributoBase !== null && e.atributoBase !== undefined && e.atributoBase !== "" && !["QI","FOR","DEX","VIG","INTENCOES","DEF","MOV","INV"].includes(e.atributoBase)){
             errors.push(`sheets[${idx}].${cat}[${j}].atributoBase inválido.`);
           }
           if(e.modMode !== undefined && !["SOMA","MULT","NONE"].includes(e.modMode)){
@@ -1323,6 +1481,8 @@ function initGM(){
 
     setStatus("OK. Sincronizando...", "ok");
 
+    await migrateAssignmentsUidToName();
+
     onValueSafe(ref(db, `rooms/${roomId}/members`), (snap) => {
       members = snap.val() || {};
       renderMembers();
@@ -1398,6 +1558,10 @@ function initPlayer(){
   };
 
   let uid = null;
+  let myNameKey = null;
+  let assignmentByUidVal = null;
+  let assignmentByNameVal = null;
+  let assignmentByNameUnsub = null;
 
   let assignedSheetIds = [];
   let activeSheetId = null;
@@ -1454,6 +1618,48 @@ function initPlayer(){
       uniq.push(id);
     }
     return uniq;
+  }
+
+  function recomputeAssignments(){
+    const ids = [
+      ...parseAssignedIds(assignmentByUidVal),
+      ...parseAssignedIds(assignmentByNameVal)
+    ];
+
+    // unique, keep order
+    const uniq = [];
+    const seen = new Set();
+    for(const id of ids){
+      if(!id) continue;
+      if(seen.has(id)) continue;
+      seen.add(id);
+      uniq.push(id);
+    }
+    assignedSheetIds = uniq;
+
+    const preferred = (assignmentByNameVal && typeof assignmentByNameVal === "object" && typeof assignmentByNameVal.primarySheetId === "string")
+      ? assignmentByNameVal.primarySheetId
+      : ((assignmentByUidVal && typeof assignmentByUidVal === "object" && typeof assignmentByUidVal.primarySheetId === "string") ? assignmentByUidVal.primarySheetId : null);
+
+    if(!assignedSheetIds.length){
+      activeSheetId = null;
+      sheet = null;
+      stopAllSheetSubs();
+      renderTabs();
+      renderEmpty();
+      setStatus("Sem ficha atribuída. Peça ao GM para atribuir.", "warn");
+      return;
+    }
+
+    let next = activeSheetId;
+    if(preferred && assignedSheetIds.includes(preferred)) next = preferred;
+    if(!next || !assignedSheetIds.includes(next)) next = assignedSheetIds[0];
+
+    renderTabs();
+    hydrateTabLabels();
+    syncSheetSubs();
+
+    setActiveSheet(next);
   }
 
   async function ensureSheetName(id){
@@ -1710,9 +1916,11 @@ function initPlayer(){
             if(cb.checked){
               selectedPassives.set(key, { category, id, name: e?.name || "(sem nome)", modMode, modValue, atributoBase: attrBase });
               setStatus("Mod ativo.", "ok");
+              if(sheet) renderSheet();
             }else{
               selectedPassives.delete(key);
               setStatus("Mod removido.", "ok");
+              if(sheet) renderSheet();
             }
           });
         }
@@ -1768,7 +1976,7 @@ function initPlayer(){
       // Regra: PASSIVA só aplica no atributo dela.
       // - Se p.atributoBase == null: aplica APENAS quando a rolagem não tem atributo (rollAttrKey null).
       // - Se p.atributoBase != null: aplica só quando bate com o atributo da rolagem.
-      const ok = (p.atributoBase == null) ? true : (p.atributoBase === rollAttrKey);
+      const ok = (p.atributoBase == null) ? (rollAttrKey == null) : (p.atributoBase === rollAttrKey);
       if(!ok) continue;
 
       if(p.modMode === "SOMA"){
@@ -1901,8 +2109,23 @@ function initPlayer(){
 
     // Mostrar nome no lugar do UID (UID real continua sendo o auth.uid)
     onValueSafe(ref(db, `rooms/${roomId}/members/${uid}`), (ms) => {
-      const m = ms.val();
+      const m = ms.val() || {};
       uidOut.textContent = m?.displayName || uid;
+
+      const nk = String(m?.nameKey || slugify(m?.displayName || "")).trim();
+      if(nk && nk !== myNameKey){
+        myNameKey = nk;
+
+        if(assignmentByNameUnsub){
+          try{ assignmentByNameUnsub(); }catch(_){}
+          assignmentByNameUnsub = null;
+        }
+
+        assignmentByNameUnsub = onValueSafe(ref(db, `rooms/${roomId}/assignmentsByName/${myNameKey}`), (snap) => {
+          assignmentByNameVal = snap.val();
+          recomputeAssignments();
+        }, "assignmentByName");
+      }
     }, "memberSelf");
 
     setStatus("Carregando meta...", "warn");
@@ -1917,31 +2140,8 @@ function initPlayer(){
     // abas / atribuição (suporta legacy sheetId e novo sheetIds)
     setStatus("Carregando atribuição...", "warn");
     onValueSafe(ref(db, `rooms/${roomId}/assignments/${uid}`), (snap) => {
-      const val = snap.val();
-
-      assignedSheetIds = parseAssignedIds(val);
-      if(!assignedSheetIds.length){
-        activeSheetId = null;
-        sheet = null;
-        stopAllSheetSubs();
-        renderTabs();
-        renderEmpty();
-        setStatus("Sem ficha atribuída. Peça ao GM para atribuir.", "warn");
-        return;
-      }
-
-      // preferir primarySheetId quando existir
-      const preferred = (val && typeof val === "object" && typeof val.primarySheetId === "string") ? val.primarySheetId : null;
-
-      let next = activeSheetId;
-      if(preferred && assignedSheetIds.includes(preferred)) next = preferred;
-      if(!next || !assignedSheetIds.includes(next)) next = assignedSheetIds[0];
-
-      renderTabs();
-      hydrateTabLabels();
-      syncSheetSubs();
-
-      setActiveSheet(next);
+      assignmentByUidVal = snap.val();
+      recomputeAssignments();
     }, "assignment");
 
     $$(".btn.attr").forEach(btn => btn.addEventListener("click", () => rollAttribute(btn.dataset.attr)));
