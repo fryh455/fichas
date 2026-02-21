@@ -1564,7 +1564,7 @@ function initGM(){
     }, "sheets");
 
     onValueSafe(
-      query(ref(db, `rooms/${roomId}/rollLogs`), orderByChild("at"), limitToLast(80)),
+      query(ref(db, `rooms/${roomId}/rollLogs`), limitToLast(80)),
       (snap) => {
         rollLogs = snap.val() || {};
         renderRollLogs();
@@ -2082,7 +2082,8 @@ function initPlayer(){
         .map(s => String(s).slice(0, 140));
 
       const payload = {
-        at: serverTimestamp(),
+        at: Date.now(),
+        atServer: serverTimestamp(),
         byUid: uid,
         byName: myDisplayName || null,
         byNameKey: myNameKey || null,
@@ -2097,6 +2098,7 @@ function initPlayer(){
       await set(push(ref(db, `rooms/${roomId}/rollLogs`)), payload);
     }catch(e){
       console.error("rollLogs write failed", e);
+      try{ setStatus(`Falha ao registrar log: ${e?.code || e?.message || e}`, "err"); }catch(_){ }
     }
   }
 
