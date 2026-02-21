@@ -31,7 +31,16 @@
         "members": {
           "$uid": {
             ".read": "auth != null && (auth.uid == $uid || auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val())",
-            ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || (auth.uid == $uid && !data.exists()))"
+            ".write": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || (auth.uid == $uid && ( (!data.exists() && newData.child('role').val() == 'PLAYER') || (data.exists() && (data.child('role').val() == 'PLAYER' || !data.child('role').exists()) && newData.child('role').val() == 'PLAYER') )))",
+            "role": {
+              ".validate": "newData.val() == 'PLAYER' || (auth != null && auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() && newData.val() == 'GM')"
+            },
+            "displayName": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+            },
+            "nameKey": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60"
+            }
           }
         },
         "assignments": {

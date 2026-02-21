@@ -220,7 +220,7 @@ function onValueSafe(r, cb, label=""){
 
 
 // build marker (pra validar cache/deploy)
-const BUILD_ID = "v20";
+const BUILD_ID = "v21";
 console.log("FichasOnline build", BUILD_ID);
 
 // Guard: em alguns deploys antigos pode ter sobrado um token solto `data`.
@@ -2726,6 +2726,17 @@ function initPlayer(){
       const mSnap = await get(mRef);
       if(!mSnap.exists()){
         await set(mRef, { role:"PLAYER", displayName: dn, nameKey: nk, joinedAt: serverTimestamp() });
+      }else{
+        // versions antigas podem ter member sem nameKey -> isso quebra permissões de sheets/assignmentsByName.
+        const cur = mSnap.val() || {};
+        const patch = {};
+        if((!cur.displayName || String(cur.displayName).trim().length === 0) && dn) patch.displayName = dn;
+        if((!cur.nameKey || String(cur.nameKey).trim().length === 0) && nk) patch.nameKey = nk;
+        // nunca deixar PLAYER alterar role
+        if(cur.role !== "PLAYER" && cur.role !== "GM") patch.role = "PLAYER";
+        if(Object.keys(patch).length){
+          await update(mRef, patch);
+        }
       }
     }catch(e){
       console.warn("Falha ao garantir member", e);
