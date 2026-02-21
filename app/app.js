@@ -2237,6 +2237,20 @@ function initPlayer(){
     uid = user.uid;
     uidOut.textContent = "(carregando...)";
 
+    // garante members/<uid> existir (necessário para permissões de logs e assignments por nome)
+    try{
+      const dn = safeName(localStorage.getItem("fo_displayName") || "Player");
+      const nk = slugify(dn);
+      const mRef = ref(db, `rooms/${roomId}/members/${uid}`);
+      const mSnap = await get(mRef);
+      if(!mSnap.exists()){
+        await set(mRef, { role:"PLAYER", displayName: dn, nameKey: nk, joinedAt: serverTimestamp() });
+      }
+    }catch(e){
+      console.warn("Falha ao garantir member", e);
+    }
+
+
     // Mostrar nome no lugar do UID (UID real continua sendo o auth.uid)
     onValueSafe(ref(db, `rooms/${roomId}/members/${uid}`), (ms) => {
       const m = ms.val() || {};
@@ -2347,4 +2361,3 @@ function initPlayer(){
     setStatus(`Erro: ${e?.message || e}`, "err");
   });
 }
-
