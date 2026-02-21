@@ -60,6 +60,13 @@
             }
           }
         },
+        "rollLogs": {
+          ".read": "auth != null && auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val()",
+          "$logId": {
+            ".write": "auth != null && !data.exists() && root.child('rooms/'+$roomId+'/members/'+auth.uid).exists() && newData.child('byUid').val() == auth.uid",
+            ".validate": "newData.hasChildren(['byUid','total','at']) && newData.child('byUid').isString() && newData.child('byUid').val().length > 0 && newData.child('byUid').val().length < 80 && newData.child('total').isNumber() && newData.child('total').val() >= -999999 && newData.child('total').val() <= 999999 && (!newData.child('title').exists() || (newData.child('title').isString() && newData.child('title').val().length <= 120)) && (!newData.child('sheetId').exists() || (newData.child('sheetId').isString() && newData.child('sheetId').val().length <= 120)) && (!newData.child('byName').exists() || (newData.child('byName').isString() && newData.child('byName').val().length <= 60)) && (!newData.child('details').exists() || newData.child('details').childrenCount() <= 60)"
+          }
+        },
         "assignmentsByName": {
           "$nameKey": {
             ".read": "auth != null && (auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val() || root.child('rooms/'+$roomId+'/members/'+auth.uid+'/nameKey').val() == $nameKey)",

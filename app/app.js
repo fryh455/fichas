@@ -2,7 +2,8 @@ import {
   auth, db,
   setPersistence, browserLocalPersistence,
   signInAnonymously, signOut, onAuthStateChanged,
-  ref, get, set, update, onValue, push, serverTimestamp
+  ref, get, set, update, onValue, push, serverTimestamp,
+  query, orderByChild, limitToLast
 } from "./firebase.js";
 
 /** --------------------------
@@ -355,6 +356,7 @@ function initGM(){
   const btnCopyGmKey = $("#btnCopyGmKey");
   const membersList = $("#membersList");
   const sheetsList = $("#sheetsList");
+  const rollLogsList = $("#rollLogsList");
 
   const btnNewSheet = $("#btnNewSheet");
   const sheetForm = $("#sheetForm");
@@ -420,6 +422,8 @@ function initGM(){
   let userUid = null;
   let meta = null;
   let members = {};
+  let rollLogs = {};
+  const revealedRollLogs = new Set();
   let playersByNameKey = new Map(); // nameKey -> { name, uids: [] }
   let sheets = {};
   let currentSheetId = null; // slug
@@ -502,6 +506,68 @@ function initGM(){
     renderEntryList(itemsCrudList, "items");
     renderEntryList(advantagesCrudList, "advantages");
     renderEntryList(disadvantagesCrudList, "disadvantages");
+  }
+
+  function coerceDetailsList(val){
+    if(Array.isArray(val)) return val.map(x=>String(x));
+    if(val && typeof val === "object"){
+      const keys = Object.keys(val).sort((a,b)=> Number(a)-Number(b));
+      return keys.map(k => String(val[k]));
+    }
+    return [];
+  }
+
+  function renderRollLogs(){
+    if(!rollLogsList) return;
+    const entries = Object.entries(rollLogs || {});
+    if(entries.length === 0){
+      rollLogsList.innerHTML = '<div class="muted">(nenhuma rolagem ainda)</div>';
+      return;
+    }
+
+    entries.sort((a,b)=> (asInt(b[1]?.at, 0) - asInt(a[1]?.at, 0)));
+    rollLogsList.innerHTML = "";
+
+    for(const [id, log] of entries){
+      const byUid = String(log?.byUid || "");
+      const who = (members?.[byUid]?.displayName) || log?.byName || byUid || "?";
+      const title = String(log?.title || "Rolagem");
+      const total = (typeof log?.total === "number") ? log.total : asNum(log?.total, 0);
+      const at = asInt(log?.at, 0);
+      const time = at ? new Date(at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "";
+      const revealed = revealedRollLogs.has(id);
+
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `
+        <div class="log-line" style="width:100%">
+          <div class="log-main">
+            <div class="log-title">${escapeHtml(who)} • <span class="log-total">${escapeHtml(String(total))}</span></div>
+            <div class="log-meta">${escapeHtml(title)}${time ? " • " + escapeHtml(time) : ""}</div>
+          </div>
+          <div class="row" style="margin:0">
+            <button class="btn small" data-reveal="1">${revealed ? "Ocultar" : "Revelar"}</button>
+          </div>
+        </div>
+      `;
+
+      const btn = div.querySelector("[data-reveal]");
+      btn?.addEventListener("click", ()=>{
+        if(revealedRollLogs.has(id)) revealedRollLogs.delete(id);
+        else revealedRollLogs.add(id);
+        renderRollLogs();
+      });
+
+      if(revealed){
+        const details = coerceDetailsList(log?.details);
+        const pre = document.createElement("pre");
+        pre.className = "pre small";
+        pre.textContent = details.length ? details.join("\n") : "(sem detalhes)";
+        div.appendChild(pre);
+      }
+
+      rollLogsList.appendChild(div);
+    }
   }
 
   function renderEntryList(container, category){
@@ -1487,6 +1553,7 @@ function initGM(){
       members = snap.val() || {};
       renderMembers();
       renderAssignPlayers();
+      renderRollLogs();
     }, "members");
 
     onValueSafe(ref(db, `rooms/${roomId}/sheets`), (snap) => {
@@ -1495,6 +1562,15 @@ function initGM(){
       renderAssignSheets();
       // não sobrescrever o editor automaticamente
     }, "sheets");
+
+    onValueSafe(
+      query(ref(db, `rooms/${roomId}/rollLogs`), orderByChild("at"), limitToLast(80)),
+      (snap) => {
+        rollLogs = snap.val() || {};
+        renderRollLogs();
+      },
+      "rollLogs"
+    );
   })().catch((e)=>{
     console.error(e);
     setStatus(`Erro: ${e?.message || e}`, "err");
@@ -1559,6 +1635,7 @@ function initPlayer(){
 
   let uid = null;
   let myNameKey = null;
+  let myDisplayName = "";
   let assignmentByUidVal = null;
   let assignmentByNameVal = null;
   let assignmentByNameUnsub = null;
@@ -1996,6 +2073,33 @@ function initPlayer(){
     return { soma, mult, appliedSoma, appliedMult };
   }
 
+  async function writeRollLog({ title, total, details }){
+    try{
+      if(!uid || !activeSheetId) return;
+      const cleanTitle = String(title || "Rolagem").slice(0, 120);
+      const cleanDetails = (Array.isArray(details) ? details : [])
+        .slice(0, 60)
+        .map(s => String(s).slice(0, 140));
+
+      const payload = {
+        at: serverTimestamp(),
+        byUid: uid,
+        byName: myDisplayName || null,
+        byNameKey: myNameKey || null,
+        sheetId: activeSheetId,
+        sheetName: String(sheet?.name || "").slice(0, 120) || null,
+        title: cleanTitle,
+        total: Number(total),
+        details: cleanDetails
+      };
+
+      // não bloquear UI
+      await set(push(ref(db, `rooms/${roomId}/rollLogs`)), payload);
+    }catch(e){
+      console.error("rollLogs write failed", e);
+    }
+  }
+
   // Output: somente d12 e modificadores != 0 + total
   function rollCore({ title, rollAttrKey, baseAttrValue, activeMod, activeName }){
     if(!sheet){
@@ -2028,6 +2132,29 @@ function initPlayer(){
 
     const isCrit = (d12 === 12);
     if(isCrit) totalFinal = Math.floor(totalFinal * 1.5);
+
+    const details = [];
+    details.push(`d12: ${d12}`);
+
+    if(diceBonus !== 0) details.push(`${diceBonus >= 0 ? "+" : ""}${diceBonus} (mental)`);
+    if(baseAttrValue !== 0){
+      const label = rollAttrKey ? `atributo ${rollAttrKey}` : "atributo";
+      details.push(`${baseAttrValue >= 0 ? "+" : ""}${baseAttrValue} (${label})`);
+    }
+    for(const a of pass.appliedSoma){
+      details.push(`${a.value >= 0 ? "+" : ""}${a.value} (passiva: ${a.name})`);
+    }
+    if(somaAtiva !== 0) details.push(`${somaAtiva >= 0 ? "+" : ""}${somaAtiva} (ativa: ${activeName || "ação"})`);
+
+    if(hasMult){
+      for(const a of pass.appliedMult){
+        details.push(`${a.value >= 0 ? "+" : ""}${a.value} (mult passiva: ${a.name})`);
+      }
+      if(multAtiva !== 0) details.push(`${multAtiva >= 0 ? "+" : ""}${multAtiva} (mult ativa: ${activeName || "ação"})`);
+      details.push(`mult total: ${multValue}`);
+    }
+
+    if(isCrit) details.push(`crítico: SIM`);
 
     const lines = [];
     lines.push(String(title || "Rolagem"));
@@ -2067,6 +2194,9 @@ function initPlayer(){
     lines.push(`total: ${totalFinal}`);
 
     rollOut.textContent = lines.join("\n");
+
+    // log pro GM (total imediato + detalhes ao revelar)
+    writeRollLog({ title: title || "Rolagem", total: totalFinal, details }).catch(()=>{});
   }
 
   function rollAttribute(attrKey){
@@ -2110,7 +2240,8 @@ function initPlayer(){
     // Mostrar nome no lugar do UID (UID real continua sendo o auth.uid)
     onValueSafe(ref(db, `rooms/${roomId}/members/${uid}`), (ms) => {
       const m = ms.val() || {};
-      uidOut.textContent = m?.displayName || uid;
+      myDisplayName = String(m?.displayName || "").trim();
+      uidOut.textContent = myDisplayName || uid;
 
       const nk = String(m?.nameKey || slugify(m?.displayName || "")).trim();
       if(nk && nk !== myNameKey){

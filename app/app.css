@@ -45,6 +45,14 @@ textarea{ resize:vertical; }
 .kv{ margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; }
 .badge{ font-size:12px; padding:2px 7px; border-radius:999px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.04); }
 .pre{ white-space:pre-wrap; word-break:break-word; background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:10px; min-height:36px; }
+.pre.small{ font-size:12.5px; opacity:.95; }
+
+/* roll logs (gm) */
+.log-line{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+.log-main{ display:flex; flex-direction:column; gap:4px; }
+.log-title{ font-weight:650; }
+.log-meta{ font-size:12px; opacity:.78; }
+.log-total{ font-weight:800; font-size:16px; }
 .toggle{ display:flex; align-items:center; gap:8px; font-size:13px; opacity:.95; }
 .toggle input{ width:auto; }
 

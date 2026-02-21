@@ -5,6 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getDatabase, ref, get, set, update, onValue, push, serverTimestamp
+  , query, orderByChild, limitToLast
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig = {
@@ -25,5 +26,6 @@ export const db = getDatabase(app);
 export {
   setPersistence, browserLocalPersistence,
   signInAnonymously, signOut, onAuthStateChanged,
-  ref, get, set, update, onValue, push, serverTimestamp
+  ref, get, set, update, onValue, push, serverTimestamp,
+  query, orderByChild, limitToLast
 };
