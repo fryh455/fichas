@@ -220,7 +220,7 @@ function onValueSafe(r, cb, label=""){
 
 
 // build marker (pra validar cache/deploy)
-const BUILD_ID = "v21";
+const BUILD_ID = "v22";
 console.log("FichasOnline build", BUILD_ID);
 
 // Guard: em alguns deploys antigos pode ter sobrado um token solto `data`.
@@ -456,6 +456,7 @@ function initGM(){
   const entryModValue = $("#entryModValue");
   const entryUsesCurrent = $("#entryUsesCurrent");
   const entryUsesMax = $("#entryUsesMax");
+  const entryDesc = $("#entryDesc");
   const entryNotes = $("#entryNotes");
   const btnSaveEntry = $("#btnSaveEntry");
   const btnDeleteEntry = $("#btnDeleteEntry");
@@ -508,6 +509,7 @@ function initGM(){
       modMode: "NONE",
       usesCurrent: null,
       usesMax: null,
+      description: null,
       notes: null
     };
   }
@@ -532,6 +534,8 @@ function initGM(){
     const um = e?.usesMax;
     out.usesCurrent = (uc === null || uc === undefined || uc === "") ? null : (Number.isFinite(Number(uc)) ? Math.trunc(Number(uc)) : null);
     out.usesMax = (um === null || um === undefined || um === "") ? null : (Number.isFinite(Number(um)) ? Math.trunc(Number(um)) : null);
+
+    out.description = (e?.description === null || e?.description === undefined) ? null : String(e.description).slice(0,1200);
     out.notes = (e?.notes === null || e?.notes === undefined) ? null : String(e.notes).slice(0,800);
 
     return out;
@@ -548,6 +552,7 @@ function initGM(){
     entryModValue.value = "";
     entryUsesCurrent.value = "";
     entryUsesMax.value = "";
+    if(entryDesc) entryDesc.value = "";
     entryNotes.value = "";
   }
 
@@ -684,6 +689,7 @@ function initGM(){
     entryModValue.value = (e.modValue === null || e.modValue === undefined) ? "" : String(e.modValue);
     entryUsesCurrent.value = (e.usesCurrent === null || e.usesCurrent === undefined) ? "" : String(e.usesCurrent);
     entryUsesMax.value = (e.usesMax === null || e.usesMax === undefined) ? "" : String(e.usesMax);
+    if(entryDesc) entryDesc.value = (e.description === null || e.description === undefined) ? "" : String(e.description);
     entryNotes.value = (e.notes === null || e.notes === undefined) ? "" : String(e.notes);
 
     setStatus("Registro carregado no editor.", "ok");
@@ -720,6 +726,7 @@ function initGM(){
       modValue: entryModValue.value,
       usesCurrent: entryUsesCurrent.value,
       usesMax: entryUsesMax.value,
+      description: entryDesc ? entryDesc.value : null,
       notes: entryNotes.value
     });
 
@@ -1718,6 +1725,13 @@ function initGM(){
             const um = Number(e.usesMax);
             if(!Number.isFinite(um) || Math.trunc(um) !== um) errors.push(`sheets[${idx}].${cat}[${j}].usesMax deve ser int.`);
           }
+
+          if(e.description !== undefined && e.description !== null && e.description !== ""){
+            if(typeof e.description !== "string") errors.push(`sheets[${idx}].${cat}[${j}].description deve ser string.`);
+          }
+          if(e.notes !== undefined && e.notes !== null && e.notes !== ""){
+            if(typeof e.notes !== "string") errors.push(`sheets[${idx}].${cat}[${j}].notes deve ser string.`);
+          }
         });
       }
 
@@ -2293,6 +2307,15 @@ function initPlayer(){
         const modMode = (e?.modMode === "SOMA" || e?.modMode === "MULT" || e?.modMode === "NONE") ? e.modMode : "NONE";
         const modValue = (modMode === "NONE") ? null : (Number.isFinite(Number(e?.modValue)) ? Number(e.modValue) : 0);
 
+        const descTxt = String(e?.description || "").trim();
+        const notesTxt = String(e?.notes || "").trim();
+        const extraHtml = (descTxt || notesTxt) ? `
+          <div class="entrytext">
+            ${descTxt ? `<div><span class="badge subtle">descr</span> <span class="entrytext-body">${escapeHtml(descTxt)}</span></div>` : ""}
+            ${notesTxt ? `<div><span class="badge subtle">nota</span> <span class="entrytext-body">${escapeHtml(notesTxt)}</span></div>` : ""}
+          </div>
+        ` : "";
+
         const uses = ((e?.usesCurrent !== null && e?.usesCurrent !== undefined) || (e?.usesMax !== null && e?.usesMax !== undefined))
           ? `<span class="badge">uses ${e?.usesCurrent ?? "?"}/${e?.usesMax ?? "?"}</span>`
           : "";
@@ -2313,6 +2336,7 @@ function initPlayer(){
             <div class="meta">
               <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
               <div class="kv">${badges}</div>
+              ${extraHtml}
             </div>
             <div class="row" style="margin:0;gap:8px">
               <button class="btn small primary" data-roll="1">Rolar</button>
@@ -2332,6 +2356,7 @@ function initPlayer(){
             <div class="meta">
               <div class="title">${escapeHtml(e?.name || "(sem nome)")}</div>
               <div class="kv">${badges}</div>
+              ${extraHtml}
             </div>
             <div class="row" style="margin:0">
               <label class="toggle">

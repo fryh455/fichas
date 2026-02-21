@@ -267,6 +267,23 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   color: rgba(234,240,255,.86);
 }
 
+.badge.subtle{
+  opacity: .75;
+}
+
+.entrytext{
+  margin-top: 8px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  color: rgba(234,240,255,.78);
+  font-size: 12.5px;
+}
+.entrytext-body{
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* pre / logs */
 .pre{
   white-space: pre-wrap;
