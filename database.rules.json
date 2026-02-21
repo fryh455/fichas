@@ -68,7 +68,8 @@
           },
           ".indexOn": [
             "at"
-          ]
+          ],
+          ".write": "auth != null && auth.uid == root.child('rooms/'+$roomId+'/meta/gmUid').val()"
         },
         "assignmentsByName": {
           "$nameKey": {

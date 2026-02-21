@@ -357,6 +357,7 @@ function initGM(){
   const membersList = $("#membersList");
   const sheetsList = $("#sheetsList");
   const rollLogsList = $("#rollLogsList");
+  const btnClearRollLogs = $("#btnClearRollLogs");
 
   const btnNewSheet = $("#btnNewSheet");
   const sheetForm = $("#sheetForm");
@@ -1027,6 +1028,25 @@ function initGM(){
     clearForm();
     toast("Cancelado.", "warn");
     setStatus("Cancelado.", "warn");
+  });
+
+  btnClearRollLogs?.addEventListener("click", async () => {
+    try{
+      if(!meta || meta.gmUid !== userUid){
+        toast("Apenas o GM pode limpar logs.", "warn");
+        return setStatus("Apenas o GM pode limpar logs.", "warn");
+      }
+      if(!confirm("Limpar TODOS os logs de rolagem desta mesa?")) return;
+      await remove(ref(db, `rooms/${roomId}/rollLogs`));
+      rollLogs = {};
+      renderRollLogs();
+      toast("Logs limpos.", "ok");
+      setStatus("Logs limpos.", "ok");
+    }catch(e){
+      console.error(e);
+      toast("Falha ao limpar logs.", "err");
+      setStatus(`Falha ao limpar logs: ${e?.message || e}`, "err");
+    }
   });
 
 
