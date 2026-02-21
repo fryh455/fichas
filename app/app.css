@@ -242,6 +242,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   background: rgba(0,0,0,.18);
   transition: background .12s ease, border-color .12s ease, transform .06s ease;
 }
+
+.item.checkrow{
+  justify-content:flex-start;
+  align-items:center;
+}
+.item.checkrow input[type="checkbox"]{
+  width:18px;
+  height:18px;
+  accent-color: var(--accent);
+}
 .item:hover{
   background: rgba(0,0,0,.24);
   border-color: var(--border2);

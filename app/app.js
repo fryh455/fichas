@@ -219,15 +219,29 @@ function onValueSafe(r, cb, label=""){
 }
 
 
+// build marker (pra validar cache/deploy)
+const BUILD_ID = "v20";
+console.log("FichasOnline build", BUILD_ID);
+
+// Guard: em alguns deploys antigos pode ter sobrado um token solto `data`.
+// Declarar aqui evita crash por ReferenceError e permite a página subir.
+// (Não afeta a lógica; `data` não é usado como global.)
+let data;
+
 /** --------------------------
  * Routing by page
  * -------------------------- */
 const page = document.body?.dataset?.page || "";
 onAuthStateChanged(auth, () => { /* keep firebase warm */ });
 
-if(page === "index") initIndex();
-if(page === "gm") initGM();
-if(page === "player") initPlayer();
+try{
+  if(page === "index") initIndex();
+  if(page === "gm") initGM();
+  if(page === "player") initPlayer();
+}catch(e){
+  console.error("Init crash", e);
+  try{ setStatus(`Erro JS (${BUILD_ID}): ${e?.message || e}`, "err"); }catch(_){/* ignore */}
+}
 
 /** --------------------------
  * index.html
@@ -391,6 +405,14 @@ function initGM(){
   const rollLogsList = $("#rollLogsList");
   const btnClearRollLogs = $("#btnClearRollLogs");
 
+  // mass delete UI
+  const massDeleteSheetsList = $("#massDeleteSheetsList");
+  const massDeleteCount = $("#massDeleteCount");
+  const btnSelectAllSheets = $("#btnSelectAllSheets");
+  const btnSelectNoneSheets = $("#btnSelectNoneSheets");
+  const btnDeleteSelectedSheets = $("#btnDeleteSelectedSheets");
+  const btnDeleteAllSheets = $("#btnDeleteAllSheets");
+
   const btnNewSheet = $("#btnNewSheet");
   const sheetForm = $("#sheetForm");
   const sheetIdEl = $("#sheetId");
@@ -464,6 +486,8 @@ function initGM(){
   let currentSheetId = null; // slug
   let gmNotesUnsub = null;
   let gmNotesLocalEditing = false;
+
+  const bulkSelectedSheets = new Set();
   let currentSheetDraft = null; // {items,advantages,disadvantages}
 
   function debounce(fn, ms){
@@ -878,6 +902,7 @@ function initGM(){
     const entries = Object.entries(sheets);
     if(entries.length === 0){
       sheetsList.innerHTML = '<div class="muted">Nenhuma ficha.</div>';
+      renderMassDelete();
       return;
     }
     entries
@@ -897,6 +922,152 @@ function initGM(){
         div.querySelector("[data-edit]")?.addEventListener("click", () => loadSheetIntoForm(id, true));
         sheetsList.appendChild(div);
       });
+
+    renderMassDelete();
+  }
+
+  function updateMassDeleteCount(){
+    if(!massDeleteCount) return;
+    massDeleteCount.textContent = `${bulkSelectedSheets.size} selecionadas`;
+  }
+
+  function renderMassDelete(){
+    if(!massDeleteSheetsList) return;
+    massDeleteSheetsList.innerHTML = "";
+
+    const list = Object.entries(sheets)
+      .map(([id,s]) => ({ id, name: s?.name || id }))
+      .sort((a,b)=> a.name.localeCompare(b.name));
+
+    if(list.length === 0){
+      massDeleteSheetsList.innerHTML = '<div class="muted">Nenhuma ficha para excluir.</div>';
+      bulkSelectedSheets.clear();
+      updateMassDeleteCount();
+      return;
+    }
+
+    // remove seleções inexistentes
+    for(const id of Array.from(bulkSelectedSheets)){
+      if(!sheets[id]) bulkSelectedSheets.delete(id);
+    }
+
+    for(const s of list){
+      const div = document.createElement("div");
+      div.className = "item checkrow";
+      const checked = bulkSelectedSheets.has(s.id);
+      div.innerHTML = `
+        <input type="checkbox" ${checked ? "checked" : ""} aria-label="Selecionar ${escapeHtml(s.name)}" />
+        <div class="meta">
+          <div class="title">${escapeHtml(s.name)}</div>
+          <div class="sub"><code>${escapeHtml(s.id)}</code></div>
+        </div>
+      `;
+      const cb = div.querySelector("input[type=checkbox]");
+      cb?.addEventListener("change", ()=>{
+        if(cb.checked) bulkSelectedSheets.add(s.id);
+        else bulkSelectedSheets.delete(s.id);
+        updateMassDeleteCount();
+      });
+      massDeleteSheetsList.appendChild(div);
+    }
+    updateMassDeleteCount();
+  }
+
+  async function bulkDeleteSheets(ids){
+    const sheetIds = Array.from(new Set((ids || []).filter(Boolean)));
+    if(sheetIds.length === 0) return;
+
+    const msg = sheetIds.length === Object.keys(sheets).length
+      ? `Deletar TODAS as ${sheetIds.length} fichas? Isso também remove as atribuições.`
+      : `Deletar ${sheetIds.length} ficha(s)? Isso também remove as atribuições.`;
+    if(!confirm(msg)) return;
+
+    try{
+      setStatus(`Deletando ${sheetIds.length} ficha(s)...`, "warn");
+      const updates = {};
+
+      // remove sheets
+      for(const id of sheetIds){
+        updates[`rooms/${roomId}/sheets/${id}`] = null;
+      }
+
+      // clean assignmentsByName
+      const asnSnap = await get(ref(db, `rooms/${roomId}/assignmentsByName`));
+      const asn = ensureObj(asnSnap.val());
+      for(const [nameKey, rec0] of Object.entries(asn)){
+        const rec = ensureObj(rec0);
+        const map = ensureObj(rec.sheetIds);
+        const remaining = Object.keys(map).filter(sid => !sheetIds.includes(sid));
+
+        if(remaining.length === 0 && Object.keys(map).length > 0){
+          // delete entire assignment record
+          updates[`rooms/${roomId}/assignmentsByName/${nameKey}`] = null;
+          continue;
+        }
+
+        let changed = false;
+        for(const sid of sheetIds){
+          if(map[sid]){ changed = true; updates[`rooms/${roomId}/assignmentsByName/${nameKey}/sheetIds/${sid}`] = null; }
+        }
+
+        const nextPrimary = remaining[0] || null;
+        if(rec.primarySheetId && sheetIds.includes(rec.primarySheetId)){
+          updates[`rooms/${roomId}/assignmentsByName/${nameKey}/primarySheetId`] = nextPrimary;
+          updates[`rooms/${roomId}/assignmentsByName/${nameKey}/sheetId`] = nextPrimary; // compat
+          changed = true;
+        }
+
+        // if sheetId (legacy) points to deleted
+        if(rec.sheetId && sheetIds.includes(rec.sheetId)){
+          updates[`rooms/${roomId}/assignmentsByName/${nameKey}/sheetId`] = nextPrimary;
+          changed = true;
+        }
+
+        if(changed){
+          // ok
+        }
+      }
+
+      // clean legacy assignments/<uid>
+      const legacySnap = await get(ref(db, `rooms/${roomId}/assignments`));
+      const legacy = ensureObj(legacySnap.val());
+      for(const [uid, rec0] of Object.entries(legacy)){
+        const rec = ensureObj(rec0);
+        const map = ensureObj(rec.sheetIds);
+        const remaining = Object.keys(map).filter(sid => !sheetIds.includes(sid));
+
+        if(remaining.length === 0 && Object.keys(map).length > 0){
+          updates[`rooms/${roomId}/assignments/${uid}`] = null;
+          continue;
+        }
+
+        for(const sid of sheetIds){
+          if(map[sid]) updates[`rooms/${roomId}/assignments/${uid}/sheetIds/${sid}`] = null;
+        }
+        const nextPrimary = remaining[0] || null;
+        if(rec.primarySheetId && sheetIds.includes(rec.primarySheetId)){
+          updates[`rooms/${roomId}/assignments/${uid}/primarySheetId`] = nextPrimary;
+          updates[`rooms/${roomId}/assignments/${uid}/sheetId`] = nextPrimary;
+        }
+        if(rec.sheetId && sheetIds.includes(rec.sheetId)){
+          updates[`rooms/${roomId}/assignments/${uid}/sheetId`] = nextPrimary;
+        }
+      }
+
+      await update(ref(db), updates);
+
+      if(currentSheetId && sheetIds.includes(currentSheetId)){
+        try{ clearForm(); closeEditor(); }catch(_){/* ignore */}
+      }
+
+      bulkSelectedSheets.clear();
+      updateMassDeleteCount();
+      setStatus("Fichas deletadas.", "ok");
+      toast("Fichas deletadas.");
+    }catch(e){
+      console.error(e);
+      setStatus(`Falha ao deletar fichas: ${e?.code || e?.message || e}`, "err");
+    }
   }
 
   function renderAssignPlayers(){
@@ -1062,6 +1233,24 @@ function initGM(){
     clearForm();
     toast("Cancelado.", "warn");
     setStatus("Cancelado.", "warn");
+  });
+
+  // Mass delete controls
+  btnSelectAllSheets?.addEventListener("click", ()=>{
+    for(const id of Object.keys(sheets || {})) bulkSelectedSheets.add(id);
+    renderMassDelete();
+    toast("Selecionadas.", "ok");
+  });
+  btnSelectNoneSheets?.addEventListener("click", ()=>{
+    bulkSelectedSheets.clear();
+    renderMassDelete();
+    toast("Seleção limpa.", "ok");
+  });
+  btnDeleteSelectedSheets?.addEventListener("click", async ()=>{
+    await bulkDeleteSheets(Array.from(bulkSelectedSheets));
+  });
+  btnDeleteAllSheets?.addEventListener("click", async ()=>{
+    await bulkDeleteSheets(Object.keys(sheets || {}));
   });
 
   btnClearRollLogs?.addEventListener("click", async () => {

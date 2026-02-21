@@ -74,7 +74,22 @@
 <button class="btn danger" id="btnClearRollLogs">Limpar logs</button>
 </div>
 <div class="list" id="rollLogsList" style="margin-top:10px"></div>
-</section></div><div class="tabpane hidden" data-pane="editor"><section class="card" id="sheetEditorEmpty">
+</section></div><div class="tabpane hidden" data-pane="editor"><section class="card" id="massDeletePane">
+<h2>Excluir fichas em massa</h2>
+<div class="row wrap" style="align-items:center;gap:8px;margin-top:8px">
+  <button class="btn small" id="btnSelectAllSheets" type="button">Selecionar todas</button>
+  <button class="btn small" id="btnSelectNoneSheets" type="button">Limpar seleção</button>
+  <span class="muted" id="massDeleteCount">0 selecionadas</span>
+</div>
+<div class="list" id="massDeleteSheetsList" style="margin-top:10px"></div>
+<div class="row wrap" style="margin-top:10px;gap:8px">
+  <button class="btn danger" id="btnDeleteSelectedSheets" type="button">Deletar selecionadas</button>
+  <button class="btn danger" id="btnDeleteAllSheets" type="button">Deletar TODAS</button>
+</div>
+<div class="muted" style="margin-top:8px">Isso remove as fichas e também limpa as atribuições que apontarem para elas.</div>
+</section>
+
+<section class="card" id="sheetEditorEmpty">
 <div class="muted">Selecione uma ficha para editar ou clique “Nova ficha”.</div>
 </section><section class="card hidden" id="sheetEditorPane">
 <h2 id="sheetFormTitle">Criar</h2>
